@@ -7,24 +7,54 @@
 #import "JasonTextfieldComponent.h"
 
 @implementation JasonTextfieldComponent
-+ (UIView *)build:(NSDictionary *)json withOptions:(NSDictionary *)options{
-    CGRect frame = CGRectMake(0,0,[[UIScreen mainScreen] bounds].size.width, 50);
-    UITextField *component = [[UITextField alloc] initWithFrame:frame];
-    if(options && options[@"value"]){
-        component.text = options[@"value"];
++ (UIView *)build: (UITextField *)component withJSON: (NSDictionary *)json withOptions: (NSDictionary *)options{
+    if(!component){
+        CGRect frame = CGRectMake(0,0,[[UIScreen mainScreen] bounds].size.width, 50);
+        component = [[UITextField alloc] initWithFrame:frame];
     }
-    
-    component.delegate = [self self];
-    
     
     NSMutableDictionary *payload = [[NSMutableDictionary alloc] init];
     if(json[@"name"]){
-        payload[@"name"] = json[@"name"];
+        payload[@"name"] = [json[@"name"] description];
     }
     if(json[@"action"]){
         payload[@"action"] = json[@"action"];
     }
     component.payload = payload;
+
+    NSString *keyboard = json[@"keyboard"];
+    keyboard = keyboard ? keyboard : @"text";
+    if([keyboard isEqualToString:@"text"]){
+        component.keyboardType = UIKeyboardTypeDefault;
+    } else if([keyboard isEqualToString:@"number"]) {
+        component.keyboardType = UIKeyboardTypeNumberPad;
+    } else if([keyboard isEqualToString:@"decimal"]) {
+        component.keyboardType = UIKeyboardTypeDecimalPad;
+    } else if([keyboard isEqualToString:@"phone"]) {
+        component.keyboardType = UIKeyboardTypePhonePad;
+    } else if([keyboard isEqualToString:@"url"]) {
+        component.keyboardType = UIKeyboardTypeURL;
+    } else if([keyboard isEqualToString:@"email"]) {
+        component.keyboardType = UIKeyboardTypeEmailAddress;
+    }
+
+    if(options && options[@"value"]){
+        component.text = [options[@"value"] description];
+    } else if(json && json[@"value"]){
+        component.text = [json[@"value"] description];
+    } else {
+        component.text = @"";
+    }
+    
+    if(component.text){
+        if(component.payload && component.payload[@"name"]){
+            [self updateForm:@{component.payload[@"name"]: component.text}];
+        }
+    }
+    
+    component.delegate = [self self];
+    
+    
     [component addTarget:self action:@selector(textFieldDidChange:) forControlEvents:UIControlEventEditingChanged];
     
     // 1. Apply Common Style
@@ -32,6 +62,14 @@
     
     // 2. Custom Style
     NSDictionary *style = json[@"style"];
+    
+    if(style[@"padding"]){
+        int padding = [style[@"padding"] intValue];
+        component.layer.sublayerTransform = CATransform3DMakeTranslation(padding, 0, 0);
+    }
+ 
+    
+    
     if(style){
         if(style[@"secure"] && [style[@"secure"] boolValue]){
             ((UITextField *)component).secureTextEntry = YES;
@@ -41,11 +79,13 @@
     }
     if(json[@"placeholder"]){
         UIColor *placeholder_color;
-        NSString *placeholder_raw_str = json[@"placeholder"];
+        NSString *placeholder_raw_str = [json[@"placeholder"] description];
         
         // Color
         if(style[@"placeholder_color"]){
             placeholder_color = [JasonHelper colorwithHexString:style[@"placeholder_color"] alpha:1.0];
+        } else if(style[@"color:placeholder"]){
+            placeholder_color = [JasonHelper colorwithHexString:style[@"color:placeholder"] alpha:1.0];
         } else {
             placeholder_color = [UIColor grayColor];
         }

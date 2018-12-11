@@ -11,7 +11,7 @@
     NSInteger selectedIndex;
     NSMutableArray *rowcount;
     NSMutableArray *headers;
-    NSMutableArray *layers;
+//    NSMutableArray *layers;
     NSString *search_url;
     NSString *search_field_name;
     NSString *back_url;
@@ -23,7 +23,6 @@
     NSMutableDictionary *indexPathsForImage;
     UIImageView *backgroundImageView;
     NSArray *raw_sections;
-    PHFComposeBarView *composeBarView;
     CGFloat keyboardSize;
     NSInteger download_image_counter;
     BOOL isEditing;
@@ -34,8 +33,13 @@
     UIView *empty_view;
     CGFloat original_height;
     CGFloat original_bottom_inset;
+    CGFloat default_bottom_padding;
     BOOL need_to_adjust_frame;
     UIView *currently_focused;
+    UIRefreshControl *refreshControl;
+    #ifdef ADS
+    NSTimer *intrestialAdTimer;
+    #endif
 }
 @end
 
@@ -46,6 +50,7 @@
     [super viewDidLoad];
     
     original_height = self.view.frame.size.height;
+    default_bottom_padding = 0;
     self.tableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStylePlain];
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
     
@@ -54,8 +59,7 @@
     [self.view addSubview:self.tableView];
     [self.view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat: @"H:|[tableView]|" options:0 metrics:nil views:@{@"tableView": self.tableView}]];
     [self.view addConstraints:[NSLayoutConstraint constraintsWithVisualFormat: @"V:|[tableView]|" options:0 metrics:nil views:@{@"tableView": self.tableView}]];
- 
-    
+
     empty_view = [[UIView alloc] initWithFrame:CGRectZero];
 
     estimatedRowHeightCache = [[NSMutableDictionary alloc] init];
@@ -71,7 +75,6 @@
     self.tableView.rowHeight = UITableViewAutomaticDimension;
     self.tableView.sectionHeaderHeight = UITableViewAutomaticDimension;
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
-
     self.navigationItem.backBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@" " style:self.navigationItem.backBarButtonItem.style target:nil action:nil];
     [self.tableView setSeparatorColor:[JasonHelper colorwithHexString:@"#f5f5f5" alpha:1.0]];
     rowcount = [[NSMutableArray alloc] init];
@@ -88,12 +91,15 @@
     self.rows = [[NSArray alloc] init];
     
     self.form = [[NSMutableDictionary alloc] init];
+    self.requires = [[NSMutableDictionary alloc] init];
     self.tableView.delaysContentTouches = false;
-
+    self.agents = [[NSMutableDictionary alloc] init];
+    
+    self.focusField = nil;
+    
     self.automaticallyAdjustsScrollViewInsets = YES;
     self.tableView.cellLayoutMarginsFollowReadableWidth = NO;
 
-    
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"finishRefreshing" object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(finishRefreshing) name:@"finishRefreshing" object:nil];
     
@@ -130,6 +136,27 @@
     
     [[NSNotificationCenter defaultCenter] removeObserver:self name:UIKeyboardWillHideNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
+    
+    
+    if (self.preload) {
+        [self reload:self.preload final:YES];
+        [[Jason client] setupHeader: self.preload[@"header"] forVC: self];
+        if(self.preload[@"style"] && self.preload[@"style"][@"background"]) {
+            if([self.preload[@"style"][@"background"] isKindOfClass:[NSDictionary class]]){
+                [[Jason client] drawAdvancedBackground:self.preload[@"style"][@"background"] forVC: self];
+            } else {
+                [[Jason client] drawBackground:self.preload[@"style"][@"background"] forVC: self];
+            }
+        } else if (self.preload[@"background"]) {
+            if ([self.preload[@"background"] isKindOfClass: [NSDictionary class]]){
+                [[Jason client] drawAdvancedBackground: self.preload[@"background"] forVC: self];
+            } else {
+                [[Jason client] drawBackground:self.preload[@"background"] forVC: self];
+            }
+        }
+        [[Jason client] setupTabBar: self.preload[@"footer"][@"tabs"] forVC: self];
+        self.tableView.backgroundColor = [UIColor clearColor];
+    }
 
 }
 - (void)adjustViewForKeyboard:(NSNotification *)notification{
@@ -182,13 +209,18 @@
 
 // Handling the updated frame when keyboard shows up
 - (void)keyboardDidHide{
+    
+    #ifdef ADS
+        [self adjustBannerPosition];
+    #endif
     isEditing = NO;
 }
 - (void)keyboardDidShow:(NSNotification *)notification {
+    NSDictionary* info = [notification userInfo];
+    CGSize kbSize = [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size;
+    
     if(need_to_adjust_frame){
         // Only for 'textarea' type
-        NSDictionary* info = [notification userInfo];
-        CGSize kbSize = [[info objectForKey:UIKeyboardFrameBeginUserInfoKey] CGRectValue].size;
         UIEdgeInsets contentInsets = UIEdgeInsetsMake(self.tableView.contentInset.top, self.tableView.contentInset.left, kbSize.height, self.tableView.contentInset.right);
         self.tableView.contentInset = contentInsets;
         self.tableView.scrollIndicatorInsets = contentInsets;
@@ -197,17 +229,22 @@
             CGRect aRect = self.view.frame;
             aRect.size.height -= kbSize.height;
             CGRect currently_focused_frame = [currently_focused convertRect:currently_focused.bounds toView:self.tableView];
+            currently_focused_frame.origin.y += 20; // shift offset by 20pts vertically to give some room at the bottom after scroll
             if(!CGRectContainsRect(aRect, currently_focused_frame)){
                 dispatch_async(dispatch_get_main_queue(), ^{
                     [self.tableView scrollRectToVisible:currently_focused_frame animated:YES];
                 });
             }
         }
-    } else {
+    }
+    else {
         if(!top_aligned){
             [self scrollToBottom];
         }
     }
+#ifdef ADS
+    [self adjustBannerPosition];
+#endif
     isEditing = YES;
     
 }
@@ -225,6 +262,11 @@
     return self.navigationController.isNavigationBarHidden;
 }
 
+- (void)viewDidLayoutSubviews
+{
+    // fix for iOS7 bug in UITabBarController
+    self.extendedLayoutIncludesOpaqueBars = YES;
+}
 
 
 
@@ -257,13 +299,13 @@
                 header = [JasonComponentFactory applyStylesheet:header];
                 if(header[@"style"] && header[@"style"][@"height"]){
                     NSString *height = header[@"style"][@"height"];
-                    return [height integerValue];
+                    return [JasonHelper pixelsInDirection:@"vertical" fromExpression:height];
                 }
                 return 40.0f;
             } else {
                 header = [JasonComponentFactory applyStylesheet:header];
                 if(header[@"style"] && header[@"style"][@"height"]){
-                    return (CGFloat)[header[@"style"][@"height"] floatValue];
+                    return [JasonHelper pixelsInDirection:@"vertical" fromExpression:header[@"style"][@"height"]];
                 }
             }
             return UITableViewAutomaticDimension;
@@ -276,9 +318,16 @@
 }
 - (CGFloat)tableView:(UITableView *)tableView estimatedHeightForHeaderInSection:(NSInteger)section
 {
-    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:1000000 inSection:section];
-    CGFloat f = [self getEstimatedHeight:indexPath defaultHeight:60.0f];
-    return f;
+    NSDictionary *header = [headers objectAtIndex:section];
+    if(header && [header count] > 0){
+        NSIndexPath *indexPath = [NSIndexPath indexPathForRow:1000000 inSection:section];
+        NSLog(@"estimated for header");
+        CGFloat f = [self getEstimatedHeight:indexPath defaultHeight:300.0f];
+        return f;
+        
+    } else {
+        return 0;
+    }
 }
 
 
@@ -322,9 +371,10 @@
     [cell setStylesheet:self.style];
     
     UICollectionViewFlowLayout *flowLayout = (UICollectionViewFlowLayout *) cell.collectionView.collectionViewLayout;
-    flowLayout.minimumInteritemSpacing = [style[@"spacing"] intValue];
-    flowLayout.minimumLineSpacing = [style[@"spacing"] intValue];
-    
+    if(style[@"spacing"]){
+        flowLayout.minimumInteritemSpacing = [JasonHelper pixelsInDirection:@"horizontal" fromExpression:style[@"spacing"]];
+        flowLayout.minimumLineSpacing =  [JasonHelper pixelsInDirection:@"horizontal" fromExpression:style[@"spacing"]];
+    }
     
     // Padding Handling
     NSString *padding_left;
@@ -344,7 +394,7 @@
     if(style[@"padding_top"]) padding_top = style[@"padding_top"];
     if(style[@"padding_bottom"]) padding_bottom = style[@"padding_bottom"];
     
-    cell.collectionView.contentInset = UIEdgeInsetsMake([padding_top intValue], [padding_left intValue], [padding_bottom intValue], [padding_right intValue]);
+    cell.collectionView.contentInset = UIEdgeInsetsMake([JasonHelper pixelsInDirection:@"vertical" fromExpression:padding_top], [JasonHelper pixelsInDirection:@"horizontal" fromExpression:padding_left], [JasonHelper pixelsInDirection:@"vertical" fromExpression:padding_bottom], [JasonHelper pixelsInDirection:@"horizontal" fromExpression:padding_right]);
 
 
     
@@ -402,7 +452,7 @@
             if(style){
                 if(style[@"height"]){
                     NSString *height = style[@"height"];
-                    tabs_height = [height integerValue];
+                    tabs_height = [JasonHelper pixelsInDirection:@"vertical" fromExpression:height];
                 }
                 if(style[@"tintColor"]){   // deprecated. use tint_color
                     tabs_selection_color = [JasonHelper colorwithHexString:style[@"tintColor"] alpha:1.0];
@@ -479,7 +529,14 @@
     NSString *type = s[@"type"];
     return (type && [type isEqualToString:@"horizontal"]);
 }
+-(void)tableViewRendered:(UITableView*)tableView{
+    if (self.focusField) {
+        [self.focusField becomeFirstResponder];
+    }
+}
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(tableViewRendered:) object:tableView];
+    [self performSelector:@selector(tableViewRendered:) withObject:tableView afterDelay:0];
     NSDictionary *s = [self.sections objectAtIndex:section];
     if([self isHorizontal: s]){
         return 1;
@@ -529,30 +586,31 @@
  ********************************/
 
 
-
 - (UITableViewCell*)getVerticalSectionItem:(NSDictionary *)item forTableView:(UITableView *)tableView atIndexPath:(NSIndexPath *)indexPath{
-    NSString *cellType = @"JasonVerticalSectionItem";
-    SWTableViewCell *cell = (SWTableViewCell *)[tableView dequeueReusableCellWithIdentifier:cellType];
-    if (cell == nil)
-    {
-        NSArray *nib = [[NSBundle mainBundle] loadNibNamed:cellType owner:self options:nil];
-        cell = [nib objectAtIndex:0];
-    }
-    
+
+    // "signature" => generate a unique signature to identify prototype items.
+    NSString *signature = [JasonHelper getSignature:item];
     item = [JasonComponentFactory applyStylesheet: item];
     
+    SWTableViewCell *cell = (SWTableViewCell *)[tableView dequeueReusableCellWithIdentifier:signature];
+    UIStackView *layout;
+    if (cell == nil)
+    {
+        cell = [[SWTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:signature];
+        layout = [[UIStackView alloc] init];
+        [cell.contentView addSubview:layout];
+
+        NSString *horizontal_vfl = [NSString stringWithFormat:@"|-0@%f-[layout]-0@%f-|", UILayoutPriorityRequired, UILayoutPriorityRequired];
+        NSString *vertical_vfl = [NSString stringWithFormat:@"V:|-0@%f-[layout]-0@%f-|", UILayoutPriorityRequired, UILayoutPriorityRequired];
+        [cell.contentView addConstraints: [NSLayoutConstraint constraintsWithVisualFormat:horizontal_vfl options:NSLayoutFormatAlignAllCenterX metrics:nil views:@{@"layout": layout}]];
+        [cell.contentView addConstraints: [NSLayoutConstraint constraintsWithVisualFormat:vertical_vfl options:NSLayoutFormatAlignAllCenterY metrics:nil views:@{@"layout": layout}]];
+    } else {
+        layout = cell.contentView.subviews.firstObject;
+    }
+    NSDictionary *layout_generator = [JasonLayout fill:layout with:item atIndexPath:indexPath withForm:self.form];
+
     // Build layout and add to cell
-    NSDictionary *layout_generator = [JasonLayout build:item atIndexPath:indexPath withForm:self.form];
     NSMutableDictionary *style = layout_generator[@"style"];
-    UIStackView *layout = layout_generator[@"layout"];
-    [cell.contentView addSubview:layout];
-    
-    // Padding Handling
-    NSString *horizontal_vfl = [NSString stringWithFormat:@"|-0@%f-[layout]-0@%f-|", UILayoutPriorityRequired, UILayoutPriorityRequired];
-    NSString *vertical_vfl = [NSString stringWithFormat:@"V:|-0@%f-[layout]-0@%f-|", UILayoutPriorityRequired, UILayoutPriorityRequired];
-    [cell.contentView addConstraints: [NSLayoutConstraint constraintsWithVisualFormat:horizontal_vfl options:NSLayoutFormatAlignAllCenterX metrics:nil views:@{@"layout": layout}]];
-    [cell.contentView addConstraints: [NSLayoutConstraint constraintsWithVisualFormat:vertical_vfl options:NSLayoutFormatAlignAllCenterY metrics:nil views:@{@"layout": layout}]];
-    
 
     // Z-index handling
     if(style[@"z_index"]){
@@ -566,7 +624,8 @@
     // Currently background only at cell level (layouts don't have background)
     if(style[@"background"]){
         if([style[@"background"] hasPrefix:@"http"]){
-            UIImageView *imageView = [[UIImageView alloc] initWithFrame:CGRectMake(0,0,cell.frame.size.width, [style[@"height"] floatValue])];
+            CGFloat h = [JasonHelper pixelsInDirection:@"vertical" fromExpression:style[@"height"]];
+            UIImageView *imageView = [[UIImageView alloc] initWithFrame:CGRectMake(0,0,cell.frame.size.width, h)];
             cell.backgroundView = imageView;
             cell.backgroundView.backgroundColor = [UIColor clearColor];
             cell.backgroundView.opaque = NO;
@@ -647,7 +706,7 @@
                 section = [JasonComponentFactory applyStylesheet: section];
                 NSDictionary *style = section[@"style"];
                 if(style && style[@"height"]){
-                    return [style[@"height"] floatValue];
+                    return [JasonHelper pixelsInDirection:@"vertical" fromExpression:style[@"height"]];
                 }
                 
                 
@@ -689,7 +748,7 @@
                 item = [JasonComponentFactory applyStylesheet:item];
                 NSDictionary *style = item[@"style"];
                 if(style && style[@"height"]){
-                    return (CGFloat)[style[@"height"] floatValue];
+                    return [JasonHelper pixelsInDirection:@"vertical" fromExpression:style[@"height"]];
                 }
             } else {
                 return 0.0f;
@@ -705,17 +764,32 @@
 -(CGFloat)tableView:(UITableView *)tableView estimatedHeightForRowAtIndexPath:(NSIndexPath *)indexPath {
     @try{
         NSDictionary *s = [self.sections objectAtIndex:indexPath.section];
-        if([self isHorizontal: s]){
-            NSDictionary *style = s[@"style"];
-            if(style){
-                if(style[@"height"]){
-                    return [style[@"height"] floatValue];
+        
+        if([s[@"items"] count] > 0){
+            // if the row has a style, honor that first.
+            // If not, look to see if it has a class, if it does, look it up on style object
+            
+            NSDictionary *item = [s[@"items"] objectAtIndex:indexPath.row];
+            item = [JasonComponentFactory applyStylesheet: item];
+            NSDictionary *style = item[@"style"];
+            if(style && style[@"height"]){
+                CGFloat h = [JasonHelper pixelsInDirection:@"vertical" fromExpression:style[@"height"]];
+                if(h <= 1.0) {
+                    return 1.1;
+                } else {
+                    return h;
+                }
+            } else {
+                if([self isHorizontal: s]){
+                    return 100.0f;
+                } else {
+                    return [self getEstimatedHeight:indexPath defaultHeight:60.0f];
                 }
             }
-            return 100.0f;
         } else {
-            return [self getEstimatedHeight:indexPath defaultHeight:60.0f];
+            return 0;
         }
+        
     }
     @catch(NSException *e){
         hasError = YES;
@@ -884,7 +958,7 @@
 
 - (void)loadAssets: (NSDictionary *)body{
     JasonViewController* weakSelf = self;
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
     
         NSArray *keys = [body allKeys];
         for(NSString *key in keys){
@@ -908,37 +982,56 @@
                         // it's a url!
                         // see if it's an image type
                         if(body[@"type"]){
-                            if([body[@"type"] isEqualToString:@"image"]){
+                            if([body[@"type"] isEqualToString:@"image"] || [body[@"type"] isEqualToString:@"button"]){
+                                
+                                if(body[@"style"]) {
+                                    // [Image load optimization] Don't load assets if
+                                    // 1. height exists or
+                                    // 2. width + ratio exist
+                                    if(body[@"style"][@"height"]) {
+                                        return;
+                                    } else if (body[@"style"][@"width"] && body[@"style"][@"ratio"]) {
+                                        return;
+                                    }
+                                }
+                                
                                 // it's an image. Let's download!
                                 NSString *url = body[key];
                                 if(![url containsString:@"{{"] && ![url containsString:@"}}"]){
                                     download_image_counter++;
                                     SDWebImageManager *manager = [SDWebImageManager sharedManager];
-                                    [manager downloadImageWithURL:[NSURL URLWithString:url]
-                                                          options:0
-                                                         progress:^(NSInteger receivedSize, NSInteger expectedSize) {
-                                                             // progression tracking code
-                                                         }
-                                                        completed:^(UIImage *i, NSError *error, SDImageCacheType cacheType, BOOL finished, NSURL *imageURL) {
-                                                            download_image_counter--;
-                                                            if(!error){
-                                                                JasonComponentFactory.imageLoaded[url] = [NSValue valueWithCGSize:i.size];
-                                                            }
-                                                            //[self.tableView visibleCells];
-                                                            NSArray *indexPathArray = weakSelf.tableView.indexPathsForVisibleRows;
-                                                            NSMutableSet *visibleIndexPaths = [[NSMutableSet alloc] initWithArray: indexPathArray];
-                                                            [visibleIndexPaths intersectSet:(NSSet *)indexPathsForImage[url]];
-                                                            if(visibleIndexPaths.count > 0){
-                                                                dispatch_async(dispatch_get_main_queue(), ^{
-                                                                    [weakSelf.tableView reloadData];
-                                                                });
-                                                            }
-                                                            if(!top_aligned){
-                                                                if(download_image_counter == 0){
-                                                                    [weakSelf scrollToBottom];
-                                                                }
-                                                            }
-                                                        }];
+                                    NSDictionary *session = [JasonHelper sessionForUrl:url];
+                                    if(session && session.count > 0 && session[@"header"]){
+                                        for(NSString *key in session[@"header"]){
+                                            [manager.imageDownloader setValue:session[@"header"][key] forHTTPHeaderField:key];
+                                        }
+                                    }
+                                    if(body[@"header"] && [body[@"header"] count] > 0){
+                                        for(NSString *key in body[@"header"]){
+                                            [manager.imageDownloader setValue:body[@"header"][key] forHTTPHeaderField:key];
+                                        }
+                                    }
+                                    [manager.imageDownloader downloadImageWithURL:[NSURL URLWithString:url] options:0 progress:^(NSInteger receivedSize, NSInteger expectedSize) { } completed:^(UIImage *i, NSData *data, NSError *error, BOOL finished) {
+                                        download_image_counter--;
+                                        if(!error){
+                                            JasonComponentFactory.imageLoaded[url] = [NSValue valueWithCGSize:i.size];
+                                        }
+                                        //[self.tableView visibleCells];
+                                        dispatch_async(dispatch_get_main_queue(), ^{
+
+                                            NSArray *indexPathArray = weakSelf.tableView.indexPathsForVisibleRows;
+                                            NSMutableSet *visibleIndexPaths = [[NSMutableSet alloc] initWithArray: indexPathArray];
+                                            [visibleIndexPaths intersectSet:(NSSet *)indexPathsForImage[url]];
+                                            if(visibleIndexPaths.count > 0){
+                                                [weakSelf.tableView reloadData];
+                                            }
+                                            if(!top_aligned){
+                                                if(download_image_counter == 0){
+                                                    [weakSelf scrollToBottom];
+                                                }
+                                            }
+                                       });
+                                    }];
                                 }
                             }
                         }
@@ -950,7 +1043,7 @@
 }
 - (void)finishRefreshing{
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self.tableView.pullToRefreshView stopAnimating];
+        [refreshControl performSelector:@selector(endRefreshing) withObject:nil afterDelay:0.0];
     });
 }
 - (void)refresh {
@@ -961,7 +1054,7 @@
 }
 
 
-- (void)reload: (NSDictionary *)body{
+- (void)reload: (NSDictionary *)body final: (BOOL)final{
     indexPathsForImage = [[NSMutableDictionary alloc] init];
     isSearching = NO;
     [self finishRefreshing];
@@ -980,20 +1073,29 @@
     
     @try{
         dispatch_async(dispatch_get_main_queue(), ^{
-            
+        
             [self setupHeader: body];
             [self setupLayers:body];
             [self setupFooter: body];
             [self setupSections:body];
-        
-            if(self.isModal){
-                // Swipe down to dismiss modal
-                UIPinchGestureRecognizer *pinchRecognizer = [[UIPinchGestureRecognizer alloc] initWithTarget:self action:@selector(pinch:)];
-                [self.view addGestureRecognizer:pinchRecognizer];
+            #ifdef ADS
+            [self setupAds:body];
+            #endif
+            
+            
+            if (default_bottom_padding == 0) {
+                CGFloat bottom_padding = 0.0;
+                if (body[@"footer"] && body[@"footer"][@"tabs"]) {
+                    bottom_padding += self.tabBarController.tabBar.frame.size.height;
+                }
+                if (body[@"footer"] && body[@"footer"][@"input"]) {
+                    bottom_padding += self.composeBarView.frame.size.height;
+                }
+                default_bottom_padding = bottom_padding;
+                self.tableView.contentInset = UIEdgeInsetsMake(self.tableView.contentInset.top, self.tableView.contentInset.left, self.tableView.contentInset.bottom+bottom_padding, self.tableView.contentInset.right);
             }
-        
+            
             original_bottom_inset = self.tableView.contentInset.bottom;
-        
         });
     }
     @catch(NSException *e){
@@ -1003,26 +1105,6 @@
         NSLog(@"Register = %@", [JasonMemory client]._register);
     }
     
-}
-- (void)scrollViewDidScroll:(UIScrollView *)scrollView{
-    CGFloat threshold = -130.0f;
-    if(self.events[@"$pull"]){
-        if(!self.tabBarController.tabBar.hidden || chat_input){
-            threshold = -100.0f;
-        } else {
-            threshold = -170.0f;
-        }
-    }
-    
-    // Swipe down to close modal
-    if([self.tabBarController presentingViewController] && scrollView.isDragging && scrollView.contentOffset.y < threshold){
-        [[Jason client] cancel];
-    }
-}
-- (void) pinch:(UIPinchGestureRecognizer *)recognizer{
-    if(recognizer.scale < 0.3){
-        [[Jason client] cancel];
-    }
 }
 
 - (void)scrollToTop{
@@ -1048,24 +1130,19 @@
 
 // CHAT INPUT RELATED
 - (void)composeBarViewDidPressButton:(PHFComposeBarView *)c{
-    if(chat_input){
-        if(chat_input[@"name"]){
-            [c setText:@""];
-            [[Jason client] call:chat_input[@"right"][@"action"]];
-        }
+    if(chat_input && chat_input[@"right"] && chat_input[@"right"][@"action"]) {
+        [c setText:@""];
+        [[Jason client] call:chat_input[@"right"][@"action"]];
     }
 }
 - (void)composeBarViewDidPressUtilityButton:(PHFComposeBarView *)c{
-    if(chat_input){
-        if(chat_input[@"name"]){
-            [[Jason client] call:chat_input[@"left"][@"action"]];
-        }
+    if(chat_input && chat_input[@"left"] && chat_input[@"left"][@"action"]){
+        [[Jason client] call:chat_input[@"left"][@"action"]];
     }
 }
-
 - (void)setupHeader: (NSDictionary *)body{
     
-    self.tableView.tableHeaderView = nil;
+    
     // NAV (deprecated. See 'header' below)
     NSDictionary *nav = body[@"nav"];
     if(nav){
@@ -1087,8 +1164,9 @@
                     NSDictionary *stylized_component = [JasonComponentFactory applyStylesheet: component];
                     NSDictionary *style = stylized_component[@"style"];
                     
-                    self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
-                    
+                    if(!self.searchController){
+                        self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
+                    }
                     // style
                     NSString *theme = style[@"theme"];
                     if([theme isEqualToString:@"light"]){
@@ -1157,8 +1235,10 @@
                         }
                     }
 
-                    self.tableView.tableHeaderView = self.searchController.searchBar;
-                    self.definesPresentationContext = YES;
+                    if(!self.tableView.tableHeaderView) {
+                        self.tableView.tableHeaderView = self.searchController.searchBar;
+                    }
+                    self.searchController.hidesNavigationBarDuringPresentation = NO;
 
                     [self.searchController.searchBar sizeToFit];
 
@@ -1167,109 +1247,122 @@
                 }
             }
         }
-    }
-    
-    
-    // Header (Replacement for nav)
-    NSDictionary *header = body[@"header"];
-    if(header){
-    
-        // only handles components specific to TableView (search/tabs).
-        // common component (menu) is handled in Jason.m
-        tabs = nil;
+    } else if (body[@"header"]){
+        
+        
+        // Header (Replacement for nav)
+        NSDictionary *header = body[@"header"];
+        if(header){
+        
+            // only handles components specific to TableView (search/tabs).
+            // common component (menu) is handled in Jason.m
+            tabs = nil;
 
-        for(NSString *type in [header allKeys]){
-            if(type){
-                if([type isEqualToString:@"search"]){
-                    NSDictionary *component = [JasonComponentFactory applyStylesheet:header[type]];
-                    
-                    search_action = component[@"action"];
-                    search_field_name = component[@"name"];
-                    NSString *search_placeholder = component[@"placeholder"];
-                    NSDictionary *style = component[@"style"];
-                    
-                    self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
-                    
-                    // style
-                    NSString *theme = style[@"theme"];
-                    if([theme isEqualToString:@"light"]){
-                        self.searchController.dimsBackgroundDuringPresentation = NO;
-                    } else {
-                        self.searchController.dimsBackgroundDuringPresentation = YES;
-                    }
-                    
-                    // When there's no action, use the default search behavior
-                    if(!search_action){
-                        self.searchController.searchResultsUpdater = self;
-                        self.searchController.dimsBackgroundDuringPresentation = NO;
-                    }
-                    self.searchController.searchBar.delegate = self;
-                    
-                    NSString *backgroundColorStr = style[@"background"];
-                    UIColor *backgroundColor = self.navigationController.navigationBar.backgroundColor;
-                    if(backgroundColorStr){
-                        backgroundColor = [JasonHelper colorwithHexString:backgroundColorStr alpha:1.0];
-                    }
-                    
-                    NSString *colorStr = style[@"color"];
-                    UIColor *color = self.navigationController.navigationBar.tintColor;
-                    if(colorStr){
-                        color = [JasonHelper colorwithHexString:colorStr alpha:1.0];
-                    }
-                    
-                    if(search_placeholder){
-                        self.searchController.searchBar.placeholder = search_placeholder;
-                    }
-
-                    UIView *subViews =  [[self.searchController.searchBar subviews] firstObject];
-                    for(UIView *subView in [subViews subviews]) {
-                        if([subView conformsToProtocol:@protocol(UITextInputTraits)]) {
-                            [(UITextField *)subView setEnablesReturnKeyAutomatically:NO];
-                            [(UITextField *)subView setTextColor:color];
+            for(NSString *type in [header allKeys]){
+                if(type){
+                    if([type isEqualToString:@"search"]){
+                        NSDictionary *component = [JasonComponentFactory applyStylesheet:header[type]];
+                        
+                        search_action = component[@"action"];
+                        search_field_name = component[@"name"];
+                        NSString *search_placeholder = component[@"placeholder"];
+                        NSDictionary *style = component[@"style"];
+                        
+                        if(!self.searchController){
+                            self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
                         }
-                    }
-                    
-                    self.searchController.searchBar.returnKeyType = UIReturnKeyGo;
-                    self.searchController.searchBar.barTintColor = backgroundColor;
-                    self.searchController.searchBar.tintColor = color;
-                    self.searchController.searchBar.backgroundColor = backgroundColor;
-                    self.searchController.searchBar.searchBarStyle = UISearchBarStyleMinimal;
-                    
-                    // Search bar textfield styling
-                    NSArray *searchBarSubViews = [[self.searchController.searchBar.subviews objectAtIndex:0] subviews];
-                    for (UIView *view in searchBarSubViews) {
-                        if([view isKindOfClass:[UITextField class]])
-                        {
-                            UITextField *textField = (UITextField*)view;
-                            UIImageView *imgView = (UIImageView*)textField.leftView;
-                            imgView.image = [imgView.image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-                            imgView.tintColor = color;
-                            NSDictionary *placeholderAttributes = @{ NSForegroundColorAttributeName: color, NSFontAttributeName: [UIFont fontWithName:@"HelveticaNeue" size:15] };
-                            textField.attributedPlaceholder = [[NSAttributedString alloc] initWithString:self.searchController.searchBar.placeholder
-                                                                                                        attributes:placeholderAttributes];
+                        // style
+                        NSString *theme = style[@"theme"];
+                        if([theme isEqualToString:@"light"]){
+                            self.searchController.dimsBackgroundDuringPresentation = NO;
+                        } else {
+                            self.searchController.dimsBackgroundDuringPresentation = YES;
                         }
+                        
+                        // When there's no action, use the default search behavior
+                        if(!search_action){
+                            self.searchController.searchResultsUpdater = self;
+                            self.searchController.dimsBackgroundDuringPresentation = NO;
+                        }
+                        self.searchController.searchBar.delegate = self;
+                        
+                        NSString *backgroundColorStr = style[@"background"];
+                        UIColor *backgroundColor = self.navigationController.navigationBar.backgroundColor;
+                        if(backgroundColorStr){
+                            backgroundColor = [JasonHelper colorwithHexString:backgroundColorStr alpha:1.0];
+                        }
+                        
+                        NSString *colorStr = style[@"color"];
+                        UIColor *color = self.navigationController.navigationBar.tintColor;
+                        if(colorStr){
+                            color = [JasonHelper colorwithHexString:colorStr alpha:1.0];
+                        }
+                        
+                        if(search_placeholder){
+                            self.searchController.searchBar.placeholder = search_placeholder;
+                        }
+
+                        UIView *subViews =  [[self.searchController.searchBar subviews] firstObject];
+                        for(UIView *subView in [subViews subviews]) {
+                            if([subView conformsToProtocol:@protocol(UITextInputTraits)]) {
+                                [(UITextField *)subView setEnablesReturnKeyAutomatically:NO];
+                                [(UITextField *)subView setTextColor:color];
+                            }
+                        }
+                        
+                        self.searchController.searchBar.returnKeyType = UIReturnKeyGo;
+                        self.searchController.searchBar.barTintColor = backgroundColor;
+                        self.searchController.searchBar.tintColor = color;
+                        self.searchController.searchBar.backgroundColor = backgroundColor;
+                        self.searchController.searchBar.searchBarStyle = UISearchBarStyleMinimal;
+                        
+                        // Search bar textfield styling
+                        NSArray *searchBarSubViews = [[self.searchController.searchBar.subviews objectAtIndex:0] subviews];
+                        for (UIView *view in searchBarSubViews) {
+                            if([view isKindOfClass:[UITextField class]])
+                            {
+                                UITextField *textField = (UITextField*)view;
+                                UIImageView *imgView = (UIImageView*)textField.leftView;
+                                imgView.image = [imgView.image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+                                imgView.tintColor = color;
+                                NSDictionary *placeholderAttributes = @{ NSForegroundColorAttributeName: color, NSFontAttributeName: [UIFont fontWithName:@"HelveticaNeue" size:15] };
+                                textField.attributedPlaceholder = [[NSAttributedString alloc] initWithString:self.searchController.searchBar.placeholder
+                                                                                                            attributes:placeholderAttributes];
+                            }
+                        }
+
+                        if(!self.tableView.tableHeaderView) {
+                            self.tableView.tableHeaderView = self.searchController.searchBar;
+                        }
+                        self.searchController.hidesNavigationBarDuringPresentation = NO;
+
+                        [self.searchController.searchBar sizeToFit];
+
+                    } else if([type isEqualToString:@"tabs"]){
+                        NSDictionary *component = [JasonComponentFactory applyStylesheet:header[type]];
+                        tabs = component;
                     }
-
-                    self.tableView.tableHeaderView = self.searchController.searchBar;
-                    self.definesPresentationContext = YES;
-
-                    [self.searchController.searchBar sizeToFit];
-
-                } else if([type isEqualToString:@"tabs"]){
-                    NSDictionary *component = [JasonComponentFactory applyStylesheet:header[type]];
-                    tabs = component;
                 }
             }
         }
+    } else {
+        self.tableView.tableHeaderView = nil;
     }
 }
 
 - (void)setupLayers: (NSDictionary *)body{
-    [JasonLayer setupLayers: body withView:self.view];
+    for(UIView *v in self.layers){
+        [v removeFromSuperview];
+    }
+    self.layers = [JasonLayer setupLayers: body withView:self.view];
 }
 - (void)setupSections:(NSDictionary *)body{
     
     raw_sections = body[@"sections"];
+    
+    if(!raw_sections){
+        [self.view sendSubviewToBack:self.tableView];
+    }
     
     JasonComponentFactory.imageLoaded = [[NSMutableDictionary alloc] init];
     
@@ -1300,7 +1393,10 @@
     } else {
         self.tableView.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
         self.tableView.separatorColor = [JasonHelper colorwithHexString:@"rgb(224,224,224)" alpha:1.0];
-        self.view.backgroundColor = [UIColor whiteColor];
+
+        if (!body[@"background"]) {
+            self.view.backgroundColor = [UIColor whiteColor];
+        }
     }
     self.tableView.backgroundColor = [UIColor clearColor];
     
@@ -1309,16 +1405,16 @@
     [weakSelf loadAssets:body];
     
     if(self.events[@"$pull"]){
-        [self.tableView addPullToRefreshWithActionHandler:^{
-            [weakSelf refresh];
-        }];
+        if(!refreshControl) {
+            refreshControl = [[UIRefreshControl alloc]init];
+            [self.tableView addSubview:refreshControl];
+            [refreshControl addTarget:self action:@selector(refresh) forControlEvents:UIControlEventValueChanged];
+         }
         if(style){
             NSString *cl = style[@"color"];
             if(cl){
                 UIColor *refresh_color = [JasonHelper colorwithHexString:cl alpha:1.0];
-                self.tableView.pullToRefreshView.arrowColor = refresh_color;
-                self.tableView.pullToRefreshView.textColor = refresh_color;
-                self.tableView.pullToRefreshView.activityIndicatorViewColor = refresh_color;
+                refreshControl.tintColor = refresh_color;
             }
         }
     }
@@ -1354,13 +1450,6 @@
             [headers addObject:section[@"header"]];
         }
     }
-    
-    if(total_rowcount > 1){
-        self.tableView.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
-    } else {
-        self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
-    }
-    
     [self.tableView reloadData];
     if(!top_aligned){
         [self scrollToBottom];
@@ -1370,68 +1459,309 @@
 - (void)setupFooter: (NSDictionary *)body{
     
     if(body[@"footer"] && body[@"footer"][@"input"]){
+        
+        
         chat_input = body[@"footer"][@"input"];
         if(chat_input){
-            
-            self.extendedLayoutIncludesOpaqueBars = NO;
-            
-            //JasonViewController *weakSelf = self;
+
             __weak JasonViewController *weakSelf = self;
 
             [self.view addKeyboardPanningWithActionHandler:^(CGRect keyboardFrameInView, BOOL opening, BOOL closing) {
                 CGFloat m = MIN(original_height, keyboardFrameInView.origin.y);
-                CGRect newViewFrame = CGRectMake(weakSelf.view.frame.origin.x, weakSelf.view.frame.origin.y, weakSelf.view.frame.size.width, m);
-                weakSelf.view.frame = newViewFrame;
+                if(opening || (closing && m >= weakSelf.view.frame.size.height)){
+                    CGRect newViewFrame = CGRectMake(weakSelf.view.frame.origin.x, weakSelf.view.frame.origin.y, weakSelf.view.frame.size.width, m);
+                    weakSelf.view.frame = newViewFrame;
+                }
             }];
             
-            if(!composeBarView){
+            // textfield logic
+            
+            NSDictionary *field;
+            if(chat_input[@"textfield"]){
+                field = chat_input[@"textfield"];
+            } else {
+                field = chat_input; // to be deprecated
+            }
+            
+            if(!self.composeBarView){
                 CGRect viewBounds = [self.view bounds];
                 CGRect frame = CGRectMake(0.0f,
                                           viewBounds.size.height - PHFComposeBarViewInitialHeight,
                                           viewBounds.size.width,
                                           PHFComposeBarViewInitialHeight);
-                composeBarView = [[PHFComposeBarView alloc] initWithFrame:frame];
-                if(chat_input[@"name"]){
-                    composeBarView.textView.payload = [@{@"name": chat_input[@"name"]} mutableCopy];
+                self.composeBarView = [[PHFComposeBarView alloc] initWithFrame:frame];
+                if(field[@"name"]){
+                    self.composeBarView.textView.payload = [@{@"name": [field[@"name"] description]} mutableCopy];
                 }
-                [composeBarView setDelegate:self];
-                [self.view addSubview:composeBarView];
-                [self.view bringSubviewToFront:composeBarView];
+                [self.composeBarView setDelegate:self];
+                [self.view addSubview:self.composeBarView];
+                [self.view bringSubviewToFront:self.composeBarView];
+            } else {
+                self.composeBarView.text = @"";
             }
             
-            if(chat_input[@"placeholder"]){
-                [composeBarView setPlaceholder:chat_input[@"placeholder"]];
+            
+            // First set the background style. The order is important because we will override some background colors below
+            if(chat_input[@"style"]){
+                if(chat_input[@"style"][@"background"]){
+                    [self force_background:chat_input[@"style"][@"background"] intoView:self.composeBarView];
+                }
+            }
+            
+            // input field styling
+            if(field[@"style"]){
+                
+                //PHFComposeBarView hack to find relevant views and apply style
+                //[JasonHelper force_background:@"#000000" intoView:composeBarView];
+                for(UIView *v in self.composeBarView.subviews){
+                    for(UIView *vv in v.subviews){
+                        if([vv isKindOfClass:[UITextView class]]){
+                            vv.superview.layer.borderWidth = 0;
+                            for(UIView *vvv in vv.superview.subviews){
+                                
+                                // textfield background
+                                if(field[@"style"][@"background"]){
+                                    vvv.backgroundColor = [JasonHelper colorwithHexString:field[@"style"][@"background"] alpha:1.0];
+                                }
+                                
+                                // placeholder color
+                                if([vvv isKindOfClass:[UILabel class]]){
+                                    // placeholder label
+                                    ((UILabel*)vvv).textColor = [JasonHelper colorwithHexString:field[@"style"][@"color:placeholder"] alpha:1.0];
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+                
+                // text color
+                if(field[@"style"][@"color"]){
+                    self.composeBarView.textView.textColor = [JasonHelper colorwithHexString:field[@"style"][@"color"] alpha:1.0];
+                }
+                    
+            }
+            
+            if(field[@"placeholder"]){
+                [self.composeBarView setPlaceholder:[field[@"placeholder"] description]];
             }
             
             if(chat_input[@"left"]){
                 if(chat_input[@"left"][@"image"]){
-                    dispatch_async(dispatch_get_global_queue( DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
-                        SDWebImageManager *manager = [SDWebImageManager sharedManager];
-                        [manager downloadImageWithURL:[NSURL URLWithString:chat_input[@"left"][@"image"]]
-                                              options:0
-                                             progress:^(NSInteger receivedSize, NSInteger expectedSize) {
-                                                 // progression tracking code
-                                             }
-                                            completed:^(UIImage *image, NSError *error, SDImageCacheType cacheType, BOOL finished, NSURL *imageURL) {
-                                                UIImage *resizedImage = [JasonHelper scaleImage:image ToSize:CGSizeMake(30,30)];
-                                                dispatch_async(dispatch_get_main_queue(), ^{
-                                                    [composeBarView setUtilityButtonImage:resizedImage];
-                                                });
-                                            }
-                         ];
-                    });
+                    if([chat_input[@"left"][@"image"] containsString:@"file://"]){
+                        NSString *localImageName = [chat_input[@"left"][@"image"] substringFromIndex:7];
+                        UIImage *localImage = [UIImage imageNamed:localImageName];
+                        // colorize
+                        if(chat_input[@"left"][@"style"] && chat_input[@"left"][@"style"][@"color"]){
+                            UIColor *newColor = [JasonHelper colorwithHexString:chat_input[@"left"][@"style"][@"color"] alpha:1.0];
+                            localImage = [JasonHelper colorize:localImage into:newColor];
+                        }
+                        UIImage *resizedImage = [JasonHelper scaleImage:localImage ToSize:CGSizeMake(30,30)];
+                        [self.composeBarView setUtilityButtonImage:resizedImage];
+                    } else {
+                        dispatch_async(dispatch_get_global_queue( DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+                            SDWebImageManager *manager = [SDWebImageManager sharedManager];
+                            [manager downloadImageWithURL:[NSURL URLWithString:chat_input[@"left"][@"image"]]
+                                                  options:0
+                                                 progress:^(NSInteger receivedSize, NSInteger expectedSize) {
+                                                     // progression tracking code
+                                                 }
+                                                completed:^(UIImage *image, NSError *error, SDImageCacheType cacheType, BOOL finished, NSURL *imageURL) {
+                                                    
+                                                    // colorize
+                                                    if(chat_input[@"left"][@"style"] && chat_input[@"left"][@"style"][@"color"]){
+                                                        UIColor *newColor = [JasonHelper colorwithHexString:chat_input[@"left"][@"style"][@"color"] alpha:1.0];
+                                                        image = [JasonHelper colorize:image into:newColor];
+                                                    }
+                                                    
+                                                    UIImage *resizedImage = [JasonHelper scaleImage:image ToSize:CGSizeMake(30,30)];
+                                                    dispatch_async(dispatch_get_main_queue(), ^{
+                                                        [self.composeBarView setUtilityButtonImage:resizedImage];
+                                                    });
+                                                }
+                             ];
+                        });
+                        
+                    }
                 }
             }
             if(chat_input[@"right"]){
                 if(chat_input[@"right"][@"text"]){
-                    [composeBarView setButtonTitle:chat_input[@"right"][@"text"]];
+                    
+                    /*
+                    // handle color
+                    if(chat_input[@"right"][@"style"] && chat_input[@"right"][@"style"][@"color"]){
+                        [composeBarView setButtonTintColor:[JasonHelper colorwithHexString:chat_input[@"right"][@"style"][@"color"] alpha:1.0]];
+                    }
+                     */
+                    
+                    NSArray *buttons = [JasonHelper childOf:self.composeBarView withClassName:@"PHFComposeBarView_Button"];
+                    for(UIButton *button in buttons){
+                        if([button.subviews.firstObject isKindOfClass:[UILabel class]]){
+                            
+                            // set "color"
+                            if(chat_input[@"right"][@"style"] && chat_input[@"right"][@"style"][@"color"]){
+                                [button setTitleColor:[JasonHelper colorwithHexString:chat_input[@"right"][@"style"][@"color"] alpha:1.0] forState:UIControlStateNormal];
+                            }
+                            
+                            // set "color:disabled"
+                            if(chat_input[@"right"][@"style"] && chat_input[@"right"][@"style"][@"color:disabled"]){
+                                [button setTitleColor:[JasonHelper colorwithHexString:chat_input[@"right"][@"style"][@"color:disabled"] alpha:1.0] forState:UIControlStateDisabled];
+                            } else {
+                                // default
+                                [button setTitleColor:[JasonHelper colorwithHexString:chat_input[@"right"][@"style"][@"color"] alpha:1.0] forState:UIControlStateDisabled];
+                            }
+                        }
+                    }
+                    
+                    [self.composeBarView setButtonTitle:[chat_input[@"right"][@"text"] description]];
                 }
             }
+            
+            // The background for the entire footer input
+            if(chat_input[@"style"]){
+                if(chat_input[@"style"][@"background"]){
+                    self.composeBarView.backgroundColor = [JasonHelper colorwithHexString:chat_input[@"style"][@"background"] alpha:1.0];
+                }
+            }
+
         }
         
         
     }
 }
+- (void)force_background: (NSString *) color intoView: (UIView *) view{
+    if([view isKindOfClass:[UIToolbar class]]){
+        [(UIToolbar *)view setBackgroundImage:[UIImage new]
+                      forToolbarPosition:UIToolbarPositionAny
+                              barMetrics:UIBarMetricsDefault];
+        [(UIToolbar *)view setBackgroundColor:[UIColor clearColor]];
+    } else if([view isKindOfClass:[UITextView class]]){
+        // don't do anything
+    } else {
+        view.backgroundColor = [JasonHelper colorwithHexString:color alpha:1.0];
+        if(view.subviews && view.subviews.count > 0){
+            for(UIView *v in view.subviews){
+                [self force_background:color intoView:v];
+            }
+        }
+    }
+}
+
+/********************************
+ * Google AdMob
+ ********************************/
+
+#ifdef ADS
+- (void)setupAds: (NSDictionary *)body
+{
+    if(body[@"ads"]){
+        
+        NSArray * adData = body[@"ads"];
+        if(adData.count > 0){
+            for (int i = 0 ; i < adData.count ; i++){
+                NSDictionary *selectedAd = [adData objectAtIndex:i];
+                NSString * adType = selectedAd[@"type"];
+               
+                
+                if([adType isEqualToString:@"admob"] && selectedAd[@"options"] && selectedAd[@"options"][@"type"] && selectedAd[@"options"][@"unitId"]){
+                    
+                    NSDictionary *options = selectedAd[@"options"];
+                    NSString *adUnitId = options[@"unitId"];
+                    NSString *type = options[@"type"];
+                    if([type isEqualToString:@"banner"]){
+                        self.bannerAd = [[GADBannerView alloc] initWithAdSize:kGADAdSizeSmartBannerPortrait];
+                        CGPoint adPoint = CGPointMake(0, self.view.frame.size.height - self.bannerAd.frame.size.height);
+                       
+                        if(body[@"footer"]){
+                            adPoint = CGPointMake(0, self.view.frame.size.height - self.bannerAd.frame.size.height - self.tabBarController.tabBar.frame.size.height);
+                        }
+                        
+                        NSString * adUnitID = adUnitId;
+                        self.bannerAd.frame = CGRectMake( adPoint.x,
+                                                         adPoint.y,
+                                                         self.bannerAd.frame.size.width,
+                                                         self.bannerAd.frame.size.height );
+                        
+                        self.bannerAd.autoresizingMask =
+                        UIViewAutoresizingFlexibleLeftMargin |
+                        UIViewAutoresizingFlexibleTopMargin |
+                        UIViewAutoresizingFlexibleWidth |
+                        UIViewAutoresizingFlexibleRightMargin;
+                        
+                        self.bannerAd.adUnitID = adUnitID; //Test Id: a14dccd0fb24d45
+                        self.bannerAd.rootViewController = self;
+                        self.bannerAd.delegate = self;
+                        [self.view addSubview:self.bannerAd];
+                        
+                        GADRequest * admobRequest = [[GADRequest alloc] init];
+                        admobRequest.testDevices = @[
+                                                     // TODO: Add your device/simulator test identifiers here. Your device identifier is printed to
+                                                     // the console when the app is launched.
+                                                     kGADSimulatorID
+                                                     ];
+                        [self.bannerAd loadRequest:admobRequest];
+                    }
+                    else if([type isEqualToString:@"interstitial"]){
+                        self.interestialAd = [[GADInterstitial alloc] initWithAdUnitID:adUnitId];
+                        self.interestialAd.delegate = self;
+                        GADRequest * admobRequest = [[GADRequest alloc] init];
+                        admobRequest.testDevices = @[
+                                                     // TODO: Add your device/simulator test identifiers here. Your device identifier is printed to
+                                                     // the console when the app is launched.
+                                                     kGADSimulatorID
+                                                     ];
+                        [self.interestialAd loadRequest:admobRequest];
+                        
+                        intrestialAdTimer = [NSTimer scheduledTimerWithTimeInterval:3.0 target:self selector:@selector(showInterstitialAd) userInfo:nil repeats:YES];
+                        
+                    }
+                    
+                }
+                
+            }
+           
+        }
+    }
+
+   
+}
+-(void) showInterstitialAd{
+    if(self.interestialAd.isReady){
+        [intrestialAdTimer invalidate];
+        intrestialAdTimer = nil;
+        [self.interestialAd presentFromRootViewController:self];
+    }
+}
+
+-(void) adjustBannerPosition
+{
+    if(chat_input && self.bannerAd != nil){
+        
+        self.bannerAd.frame = CGRectMake(0, self.view.frame.size.height - self.bannerAd.frame.size.height - self.tabBarController.tabBar.frame.size.height, self.bannerAd.frame.size.width, self.bannerAd.frame.size.height);
+    }
+}
+- (void) adView: (GADBannerView*) view didFailToReceiveAdWithError: (GADRequestError*) error{
+    NSLog(@"Error on showing AD %@", error);
+}
+- (void) adViewDidReceiveAd: (GADBannerView*) view{
+    NSLog(@"Suucess on showing ad");
+    [self adjustBannerPosition];
+}
+
+- (void)interstitialDidReceiveAd:(GADInterstitial *)ad{
+     NSLog(@"--->Suucess on showing interstitial ad");
+}
+
+/// Called when an interstitial ad request completed without an interstitial to
+/// show. This is common since interstitials are shown sparingly to users.
+- (void)interstitial:(GADInterstitial *)ad didFailToReceiveAdWithError:(GADRequestError *)error{
+    NSLog(@" -->>Error on showing interstitial AD %@", error);
+}
+
+#endif
+
+/********************************/
 
 
 

@@ -305,8 +305,19 @@
     NSURLQueryItem *queryItem = [[queryItems filteredArrayUsingPredicate:predicate] firstObject];
     return queryItem.value;
 }
++ (id)objectify:(NSString *)str{
+    NSString *converted = str;
+    NSError *error;
+    NSData *data = [converted dataUsingEncoding: NSUTF8StringEncoding];
+    id result = [NSJSONSerialization JSONObjectWithData: data options: 0 error: &error];
+    if (result == nil) {
+        NSLog(@"Error: %@", error.localizedDescription);
+        return nil;
+    }
+    return result;
+}
 
-+ (NSString *)stringify:(NSDictionary *)value{
++ (NSString *)stringify:(id)value{
     /*
     NSError *error;
     @try {
@@ -320,7 +331,8 @@
      */
     
     SBJson4Writer *writer = [[SBJson4Writer alloc] init];
-    writer.humanReadable = YES;
+//    writer.humanReadable = YES;
+    writer.humanReadable = NO;
     writer.sortKeys = YES;
     @try {
         NSString *ret = [writer stringWithObject:value];
@@ -332,7 +344,6 @@
     } @catch(NSException *exception){
         return [value description];
     }
-
 }
 + (NSDictionary *)sessionForUrl:(NSString *)url{
     NSString *domain = [[[NSURL URLWithString:url] host] lowercaseString];
@@ -376,10 +387,18 @@
             url = url;
         }else if ([[url lowercaseString] hasPrefix:@"http://"] || [[url lowercaseString] hasPrefix:@"https://"]) {
             url = url;
+        } else if([[url lowercaseString] hasPrefix:@"file://"]){
+            url = url;
         } else {
             url = [NSString stringWithFormat:@"http://%@", url];
         }
-        url = [url stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+        
+        if ([url containsString:@"#"]) {
+            url = [url stringByAddingPercentEncodingWithAllowedCharacters:[[NSCharacterSet illegalCharacterSet] invertedSet]];
+        } else {
+            url = [url stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+        }
+
     }
     return url;
 }
@@ -437,9 +456,30 @@
     urlComponents2.query = nil; // Strip out query parameters.
     return [urlComponents.string isEqualToString:urlComponents2.string];
 }
-+ (CGFloat)pixelsInDirection: (NSString *)direction fromExpression: (NSString *)expression {
++ (CGFloat)parseRatio: (NSString *) ratio {
+    if([ratio containsString:@":"] || [ratio containsString:@"/"]) {
+        NSError *error = nil;
+        NSRegularExpression* regex = [NSRegularExpression regularExpressionWithPattern:@"^[ ]*([0-9]+)[ ]*[:/][ ]*([0-9]+)[ ]*$" options:0 error:&error];
+        NSRange searchedRange = NSMakeRange(0, [ratio length]);
+        NSTextCheckingResult *match = [regex firstMatchInString:ratio options:0 range: searchedRange];
+        if(match){
+            NSString *w = [ratio substringWithRange:[match rangeAtIndex:1]];
+            NSString *h = [ratio substringWithRange:[match rangeAtIndex:2]];
+            return [w floatValue]/[h floatValue];
+        } else {
+            return 1; // shouldn't happen
+        }
+    } else {
+        return [ratio floatValue];
+    }
+}
++ (CGFloat)pixelsInDirection: (NSString *)direction fromExpression: (id)exp {
     NSError *error = nil;
     CGFloat full_dimension;
+    if(!exp) return 0;
+    
+    NSString *expression = [exp description];
+    
     if([direction isEqualToString:@"vertical"]){
         full_dimension = [[UIScreen mainScreen] bounds].size.height;
     } else {
@@ -448,7 +488,7 @@
     NSRange searchedRange = NSMakeRange(0, [expression length]);
     NSRegularExpression* regexPercentageWithPixels = [NSRegularExpression regularExpressionWithPattern:@"^([0-9.]+)%[ ]*([+-]?)[ ]*([0-9]+)$" options:0 error:&error];
     NSTextCheckingResult *matchPercentageWithPixels = [regexPercentageWithPixels firstMatchInString:expression options:0 range: searchedRange];
-    CGFloat dimension;
+    CGFloat dimension = full_dimension;
     if(matchPercentageWithPixels){
         // Percentage +/- Pixels
         // Calculate percentage
@@ -469,7 +509,7 @@
         
     } else {
         
-        NSRegularExpression* regexPixels = [NSRegularExpression regularExpressionWithPattern:@"^([0-9]+)$" options:0 error:&error];
+        NSRegularExpression* regexPixels = [NSRegularExpression regularExpressionWithPattern:@"^([0-9.]+)$" options:0 error:&error];
         NSTextCheckingResult *matchPixels = [regexPixels firstMatchInString:expression options:0 range: searchedRange];
         if(matchPixels){
             // Pixels only
@@ -527,6 +567,28 @@
     return dimension;
     
 }
++ (NSString *)getSignature: (NSDictionary *)item{
+    
+    NSError *error;
+    NSData * jsonData = [NSJSONSerialization dataWithJSONObject:item options:0 error:&error];
+    NSString * json = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+    
+    
+    NSString *pattern = @"\"(url|text)\"[ ]*:[ ]*\"([^\"]+)\"";
+    
+    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:pattern
+                                                                           options:NSRegularExpressionCaseInsensitive
+                                                                             error:&error];
+    NSString *signature = [regex stringByReplacingMatchesInString:json
+                                                          options:0
+                                                            range:NSMakeRange(0, [json length])
+                                                     withTemplate:@"\"jason\":\"jason\""];
+    
+    
+    return signature;
+    
+}
+
 + (UIImage *)takescreenshot
 {
     CGSize imageSize = CGSizeZero;
@@ -846,5 +908,68 @@
   }
   FlushBuffer();
   return resultData;
+}
++ (NSArray *)childOf: (UIView *)view withClassName: (NSString *)className {
+    NSMutableArray *f = [[NSMutableArray alloc] init];
+    Class klass = NSClassFromString (className);
+    if([view isKindOfClass:klass]){
+        [f addObject:view];
+    }
+    if(view.subviews && view.subviews.count > 0){
+        for(UIView *v in view.subviews){
+            [f addObjectsFromArray: [self childOf:v withClassName:className]];
+        }
+    }
+    return [f copy];
+}
++ (id) read_local_json: (NSString *)url {
+    NSString *resourcePath = [[NSBundle mainBundle] resourcePath];
+    NSString *webrootPath = [resourcePath stringByAppendingPathComponent:@""];
+    NSString *loc = @"file:/";
+    
+    NSString *jsonFile = [url stringByReplacingOccurrencesOfString:loc withString:webrootPath];
+    
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    id ret;
+    
+    if ([fileManager fileExistsAtPath:jsonFile]) {
+        NSError *error = nil;
+        NSInputStream *inputStream = [[NSInputStream alloc] initWithFileAtPath:jsonFile];
+        [inputStream open];
+        ret = [NSJSONSerialization JSONObjectWithStream: inputStream options:kNilOptions error:&error];
+        [inputStream close];
+    } else {
+        NSLog(@"JASON FILE NOT FOUND: %@", jsonFile);
+        ret = @{};
+    }
+    return ret;
+}
++ (NSString *)normalized_url: (NSString *)url forOptions: (id)options{
+    NSString *normalized_url = [url lowercaseString];
+    normalized_url = [normalized_url stringByAppendingString:[NSString stringWithFormat:@"|%@", options]];
+    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"[/:]" options:NSRegularExpressionCaseInsensitive error:nil];
+    normalized_url = [regex stringByReplacingMatchesInString:normalized_url options:0 range:NSMakeRange(0, [normalized_url length]) withTemplate:@"_"];
+    normalized_url = [[normalized_url componentsSeparatedByCharactersInSet: [NSCharacterSet whitespaceCharacterSet]] componentsJoinedByString:@""];
+    return normalized_url;
+}
++ (NSString *) read_local_file: (NSString *)url {
+    NSString *fullPath = [self get_local_path:url];
+    NSString *contents = [NSString stringWithContentsOfFile:fullPath encoding:NSUTF8StringEncoding error:NULL];
+    return contents;
+}
++ (NSString *) get_local_path: (NSString *) url {
+    NSString *resourcePath = [[NSBundle mainBundle] resourcePath];
+    NSString *fullPath = [url stringByReplacingOccurrencesOfString:@"file:/" withString:resourcePath];
+    return fullPath;
+}
++ (id) getPlistSettings: (NSString *)key {
+    NSDictionary * infoPlistSettings = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"settings"];
+    if (infoPlistSettings != nil){
+        return infoPlistSettings[key];
+    } else {
+        NSURL *file = [[NSBundle mainBundle] URLForResource:@"settings" withExtension:@"plist"];
+        NSDictionary *settingsPlistSettings = [NSDictionary dictionaryWithContentsOfURL:file];
+        return settingsPlistSettings[key];
+    }
 }
 @end

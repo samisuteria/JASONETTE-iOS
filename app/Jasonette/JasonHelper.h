@@ -24,7 +24,8 @@
 + (NSString *)mimeTypeForData:(NSData *)data;
 + (UIImage*)colorize: (UIImage *)image into:(UIColor*)color;
 + (NSString*)getParamValueFor:(NSString *)key fromUrl: (NSString *)url;
-+ (NSString *)stringify:(NSDictionary *)value;
++ (NSString *)stringify:(id)value;
++ (id)objectify:(NSString*)str;
 + (NSDictionary *)sessionForUrl:(NSString *)url;
 + (NSDictionary*)dictFromJSONFile:(NSString*)filename;
 + (NSDictionary *)jasonify:(NSString*)str;
@@ -37,5 +38,12 @@
 + (CGFloat)pixelsInDirection: (NSString *)direction fromExpression: (NSString *)expression;
 + (UIImage *)takescreenshot;
 + (NSString*) UTF8StringFromData:(NSData*)data;
-
++ (NSString *)getSignature: (NSDictionary *)item;
++ (NSArray *)childOf: (UIView *)view withClassName: (NSString *)className;
++ (id) read_local_json: (NSString *)url;
++ (NSString *)normalized_url: (NSString *)url forOptions: (id)options;
++ (CGFloat)parseRatio: (NSString *) ratio;
++ (NSString *) read_local_file: (NSString *)url;
++ (NSString *) get_local_path: (NSString *) url;
++ (id) getPlistSettings: (NSString *)key;
 @end

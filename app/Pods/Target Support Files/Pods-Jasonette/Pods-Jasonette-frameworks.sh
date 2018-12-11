@@ -59,8 +59,13 @@ code_sign_if_enabled() {
   if [ -n "${EXPANDED_CODE_SIGN_IDENTITY}" -a "${CODE_SIGNING_REQUIRED}" != "NO" -a "${CODE_SIGNING_ALLOWED}" != "NO" ]; then
     # Use the current code_sign_identitiy
     echo "Code Signing $1 with Identity ${EXPANDED_CODE_SIGN_IDENTITY_NAME}"
-    echo "/usr/bin/codesign --force --sign ${EXPANDED_CODE_SIGN_IDENTITY} ${OTHER_CODE_SIGN_FLAGS} --preserve-metadata=identifier,entitlements \"$1\""
-    /usr/bin/codesign --force --sign ${EXPANDED_CODE_SIGN_IDENTITY} ${OTHER_CODE_SIGN_FLAGS} --preserve-metadata=identifier,entitlements "$1"
+    local code_sign_cmd="/usr/bin/codesign --force --sign ${EXPANDED_CODE_SIGN_IDENTITY} ${OTHER_CODE_SIGN_FLAGS} --preserve-metadata=identifier,entitlements '$1'"
+
+    if [ "${COCOAPODS_PARALLEL_CODE_SIGN}" == "true" ]; then
+      code_sign_cmd="$code_sign_cmd &"
+    fi
+    echo "$code_sign_cmd"
+    eval "$code_sign_cmd"
   fi
 }
 
@@ -94,17 +99,17 @@ if [[ "$CONFIGURATION" == "Debug" ]]; then
   install_framework "$BUILT_PRODUCTS_DIR/DHSmartScreenshot/DHSmartScreenshot.framework"
   install_framework "$BUILT_PRODUCTS_DIR/DTCoreText/DTCoreText.framework"
   install_framework "$BUILT_PRODUCTS_DIR/DTFoundation/DTFoundation.framework"
-  install_framework "$BUILT_PRODUCTS_DIR/FDWaveformView/FDWaveformView.framework"
+  install_framework "$BUILT_PRODUCTS_DIR/FLEX/FLEX.framework"
   install_framework "$BUILT_PRODUCTS_DIR/FreeStreamer/FreeStreamer.framework"
   install_framework "$BUILT_PRODUCTS_DIR/HMSegmentedControl/HMSegmentedControl.framework"
   install_framework "$BUILT_PRODUCTS_DIR/INTULocationManager/INTULocationManager.framework"
   install_framework "$BUILT_PRODUCTS_DIR/IQAudioRecorderController/IQAudioRecorderController.framework"
   install_framework "$BUILT_PRODUCTS_DIR/JDStatusBarNotification/JDStatusBarNotification.framework"
   install_framework "$BUILT_PRODUCTS_DIR/JSCoreBom/JSCoreBom.framework"
+  install_framework "$BUILT_PRODUCTS_DIR/MBProgressHUD/MBProgressHUD.framework"
   install_framework "$BUILT_PRODUCTS_DIR/NSGIF/NSGIF.framework"
   install_framework "$BUILT_PRODUCTS_DIR/NSHash/NSHash.framework"
   install_framework "$BUILT_PRODUCTS_DIR/OMGHTTPURLRQ/OMGHTTPURLRQ.framework"
-  install_framework "$BUILT_PRODUCTS_DIR/PBJVision/PBJVision.framework"
   install_framework "$BUILT_PRODUCTS_DIR/PHFComposeBarView/PHFComposeBarView.framework"
   install_framework "$BUILT_PRODUCTS_DIR/PHFDelegateChain/PHFDelegateChain.framework"
   install_framework "$BUILT_PRODUCTS_DIR/REMenu/REMenu.framework"
@@ -114,10 +119,10 @@ if [[ "$CONFIGURATION" == "Debug" ]]; then
   install_framework "$BUILT_PRODUCTS_DIR/SBJson/SBJson.framework"
   install_framework "$BUILT_PRODUCTS_DIR/SCSiriWaveformView/SCSiriWaveformView.framework"
   install_framework "$BUILT_PRODUCTS_DIR/SDWebImage/SDWebImage.framework"
-  install_framework "$BUILT_PRODUCTS_DIR/SVPullToRefresh/SVPullToRefresh.framework"
   install_framework "$BUILT_PRODUCTS_DIR/SWFrameButton/SWFrameButton.framework"
   install_framework "$BUILT_PRODUCTS_DIR/SWTableViewCell/SWTableViewCell.framework"
   install_framework "$BUILT_PRODUCTS_DIR/SZTextView/SZTextView.framework"
+  install_framework "$BUILT_PRODUCTS_DIR/SocketRocket/SocketRocket.framework"
   install_framework "$BUILT_PRODUCTS_DIR/TDOAuth/TDOAuth.framework"
   install_framework "$BUILT_PRODUCTS_DIR/TTTAttributedLabel/TTTAttributedLabel.framework"
   install_framework "$BUILT_PRODUCTS_DIR/TWMessageBarManager/TWMessageBarManager.framework"
@@ -135,17 +140,16 @@ if [[ "$CONFIGURATION" == "Release" ]]; then
   install_framework "$BUILT_PRODUCTS_DIR/DHSmartScreenshot/DHSmartScreenshot.framework"
   install_framework "$BUILT_PRODUCTS_DIR/DTCoreText/DTCoreText.framework"
   install_framework "$BUILT_PRODUCTS_DIR/DTFoundation/DTFoundation.framework"
-  install_framework "$BUILT_PRODUCTS_DIR/FDWaveformView/FDWaveformView.framework"
   install_framework "$BUILT_PRODUCTS_DIR/FreeStreamer/FreeStreamer.framework"
   install_framework "$BUILT_PRODUCTS_DIR/HMSegmentedControl/HMSegmentedControl.framework"
   install_framework "$BUILT_PRODUCTS_DIR/INTULocationManager/INTULocationManager.framework"
   install_framework "$BUILT_PRODUCTS_DIR/IQAudioRecorderController/IQAudioRecorderController.framework"
   install_framework "$BUILT_PRODUCTS_DIR/JDStatusBarNotification/JDStatusBarNotification.framework"
   install_framework "$BUILT_PRODUCTS_DIR/JSCoreBom/JSCoreBom.framework"
+  install_framework "$BUILT_PRODUCTS_DIR/MBProgressHUD/MBProgressHUD.framework"
   install_framework "$BUILT_PRODUCTS_DIR/NSGIF/NSGIF.framework"
   install_framework "$BUILT_PRODUCTS_DIR/NSHash/NSHash.framework"
   install_framework "$BUILT_PRODUCTS_DIR/OMGHTTPURLRQ/OMGHTTPURLRQ.framework"
-  install_framework "$BUILT_PRODUCTS_DIR/PBJVision/PBJVision.framework"
   install_framework "$BUILT_PRODUCTS_DIR/PHFComposeBarView/PHFComposeBarView.framework"
   install_framework "$BUILT_PRODUCTS_DIR/PHFDelegateChain/PHFDelegateChain.framework"
   install_framework "$BUILT_PRODUCTS_DIR/REMenu/REMenu.framework"
@@ -155,13 +159,16 @@ if [[ "$CONFIGURATION" == "Release" ]]; then
   install_framework "$BUILT_PRODUCTS_DIR/SBJson/SBJson.framework"
   install_framework "$BUILT_PRODUCTS_DIR/SCSiriWaveformView/SCSiriWaveformView.framework"
   install_framework "$BUILT_PRODUCTS_DIR/SDWebImage/SDWebImage.framework"
-  install_framework "$BUILT_PRODUCTS_DIR/SVPullToRefresh/SVPullToRefresh.framework"
   install_framework "$BUILT_PRODUCTS_DIR/SWFrameButton/SWFrameButton.framework"
   install_framework "$BUILT_PRODUCTS_DIR/SWTableViewCell/SWTableViewCell.framework"
   install_framework "$BUILT_PRODUCTS_DIR/SZTextView/SZTextView.framework"
+  install_framework "$BUILT_PRODUCTS_DIR/SocketRocket/SocketRocket.framework"
   install_framework "$BUILT_PRODUCTS_DIR/TDOAuth/TDOAuth.framework"
   install_framework "$BUILT_PRODUCTS_DIR/TTTAttributedLabel/TTTAttributedLabel.framework"
   install_framework "$BUILT_PRODUCTS_DIR/TWMessageBarManager/TWMessageBarManager.framework"
   install_framework "$BUILT_PRODUCTS_DIR/UICKeyChainStore/UICKeyChainStore.framework"
   install_framework "$BUILT_PRODUCTS_DIR/libPhoneNumber-iOS/libPhoneNumber_iOS.framework"
+fi
+if [ "${COCOAPODS_PARALLEL_CODE_SIGN}" == "true" ]; then
+  wait
 fi

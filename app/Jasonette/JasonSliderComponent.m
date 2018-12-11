@@ -7,15 +7,27 @@
 #import "JasonSliderComponent.h"
 
 @implementation JasonSliderComponent
-+ (UIView *)build:(NSDictionary *)json withOptions:(NSDictionary *)options{
-    CGRect frame = CGRectMake(0,0, [[UIScreen mainScreen] bounds].size.width-20, 20);
-    UISlider *component = [[UISlider alloc] initWithFrame:frame];
++ (UIView *)build: (UISlider *)component withJSON: (NSDictionary *)json withOptions: (NSDictionary *)options{
+    if(!component){
+        CGRect frame = CGRectMake(0,0, [[UIScreen mainScreen] bounds].size.width-20, 20);
+        component = [[UISlider alloc] initWithFrame:frame];
+    }
     component.continuous = YES;
     component.value = 0.5;
-    if(options && options[@"value"] && [options[@"value"] length] > 0){
+    component.payload = [[NSMutableDictionary alloc] init];
+    if(json && json[@"name"]) component.payload[@"name"] = [json[@"name"] description];
+    if(json && json[@"action"]) component.payload[@"action"] = json[@"action"];
+
+    if(options && options[@"value"]){
         component.value = [options[@"value"] floatValue];
     }
-    component.payload = [@{@"name": json[@"name"], @"action": json[@"action"]} mutableCopy];
+    
+    if(component.value){
+        if(component.payload && component.payload[@"name"]){
+            [self updateForm:@{component.payload[@"name"]: [NSString stringWithFormat:@"%f", component.value]}];
+        }
+    }
+
     [component removeTarget:self action:@selector(sliderStarted:) forControlEvents:UIControlEventTouchDown];
     [component removeTarget:self action:@selector(sliderUpdated:) forControlEvents:UIControlEventTouchUpInside];
     [component addTarget:self action:@selector(sliderStarted:) forControlEvents:UIControlEventTouchDown];

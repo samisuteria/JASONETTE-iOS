@@ -8,7 +8,7 @@
 #import "JasonHelper.h"
 #import "JasonParser.h"
 #import <AFNetworking/AFNetworking.h>
-#import <UICKeyChainStore/UICKeyChainStore.h>
+#import "JASONResponseSerializer.h"
 @import TWMessageBarManager;
 
 @interface JasonNetworkAction : JasonAction

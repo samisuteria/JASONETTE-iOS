@@ -7,8 +7,11 @@
 #import "JasonMapComponent.h"
 
 @implementation JasonMapComponent
-+ (UIView *)build:(NSDictionary *)json withOptions:(NSDictionary *)options{
-    MKMapView *component = [[MKMapView alloc] init];
++ (UIView *)build: (MKMapView *)component withJSON: (NSDictionary *)json withOptions: (NSDictionary *)options{
+
+    if(!component){
+        component = [[MKMapView alloc] init];
+    }
     [component setShowsUserLocation:YES];
     
     // Map Style
@@ -26,24 +29,40 @@
         }
     }
     
-    // Map Region
-    // 1. If 'coord' exists, set the center. Otherwise, use the current location
-    // 2. use 'width' and 'height' to create the visible area
-    NSDictionary *region = json[@"region"];
-    if(region){
-        component.payload = [@{@"region": region} mutableCopy];
-    }
-    [self setRegion: component];
+    // store the payload to the component so that it can be accessed later
+    // (example inside the mapViewDidFinishLoadingMap delegate)
     
-    // Pins
-    if(json[@"pins"]){
-        [self addPins: json[@"pins"] toMapView: component];
-    }
+    component.payload = [json mutableCopy];
+    component.delegate = (id<MKMapViewDelegate>) self;
     
     // Apply Common Style
     [self stylize:json component:component];
     
     return component;
+}
++ (void)mapViewDidFinishLoadingMap:(MKMapView *)component{
+    
+    // if already finished rendering, don't set the region or add pins
+    if(!component.payload[@"finished"]){
+        // Region
+        [self setRegion: component];
+        
+        // Pins
+        NSArray *pins = component.payload[@"pins"];
+        if(pins && pins.count > 0){
+            [self addPins: pins toMapView: component];
+        }
+        component.payload[@"finished"] = @YES;
+    }
+}
++ (void)mapView:(MKMapView *)mapView annotationView:(MKAnnotationView *)view calloutAccessoryControlTapped:(UIControl *)control
+{
+    NSDictionary *payload = ((NSObject *)view.annotation).payload;
+    if(payload[@"action"]) {
+        [[Jason client] call:payload[@"action"]];
+    } else if(payload[@"href"]) {
+        [[Jason client] go:payload[@"href"]];
+    }
 }
 + (void)addPins: (NSArray *)pins toMapView: (MKMapView *)mapView{
     for(int i = 0 ; i < pins.count ; i++){
@@ -51,7 +70,6 @@
         if(pin[@"coord"]){
             CLLocation *coord = [self pinFromCoordinateString:pin[@"coord"]];
             MKPointAnnotation *annotation = [[MKPointAnnotation alloc] init];
-            
             NSString *image = pin[@"image"];
             if(image){
                 // todo
@@ -64,11 +82,13 @@
                 if(!description){
                     description = @"";
                 }
-                [annotation setTitle:title];
-                [annotation setSubtitle:description];
+                [annotation setTitle:[title description]];
+                [annotation setSubtitle:[description description]];
             }
             [annotation setCoordinate:coord.coordinate];
             [mapView addAnnotation:annotation];
+
+            annotation.payload = [pin mutableCopy];
             
             if(pin[@"style"]){
                 if(pin[@"style"][@"selected"]){
@@ -79,6 +99,19 @@
         }
     }
 }
++ (MKAnnotationView *)mapView:(MKMapView *)mapView viewForAnnotation:(id <MKAnnotation>)annotation
+{
+    if ([annotation isKindOfClass:[MKUserLocation class]])
+        return nil;
+    
+    MKAnnotationView *annotationView = [[MKPinAnnotationView alloc] initWithAnnotation:annotation reuseIdentifier:@"location"];
+    annotationView.canShowCallout = YES;
+    annotationView.rightCalloutAccessoryView = [UIButton buttonWithType:UIButtonTypeDetailDisclosure];
+    
+    
+    return annotationView;
+}
+
 /*
 + (void)mapView:(MKMapView *)mapView didUpdateUserLocation:(MKUserLocation *)userLocation{
     [self setRegion:mapView];
@@ -97,6 +130,9 @@
     return location;
 }
 + (void)setRegion:(MKMapView *)mapView{
+    // Map Region
+    // 1. If 'coord' exists, set the center. Otherwise, use the current location
+    // 2. use 'width' and 'height' to create the visible area
     
     // Default location is current location
     CLLocation *location;

@@ -6,9 +6,7 @@
 //
 #import <Foundation/Foundation.h>
 #import "Jason.h"
-#import "RussianDollView.h"
 #import <JavaScriptCore/JavaScriptCore.h>
-
 @interface JasonParser : NSObject
 @property (nonatomic, strong) NSDictionary *options;
 + (NSDictionary *)parse: (NSDictionary *)data with: (id)parser;

@@ -6,7 +6,6 @@
 //
 #import <UIKit/UIKit.h>
 #import "UIBarButtonItem+Badge.h"
-#import "RussianDollView.h"
 #import <SDWebImage/UIImageView+WebCache.h>
 #import "JasonHelper.h"
 #import "UIView+JasonComponentPayload.h"
@@ -21,13 +20,20 @@
 #import <DTCoreText/DTCoreText.h>
 #import <PHFComposeBarView/PHFComposeBarView.h>
 #import <DAKeyboardControl/DAKeyboardControl.h>
-#import <SVPullToRefresh/SVPullToRefresh.h>
 #import "JasonLayout.h"
 #import "JasonLayer.h"
 #import "JasonComponentFactory.h"
 #import "JasonComponent.h"
+#include "Constants.h"
+#ifdef ADS
+#import <GoogleMobileAds/GoogleMobileAds.h>
+#endif
 
-@interface JasonViewController : UIViewController <TTTAttributedLabelDelegate, UISearchBarDelegate, RussianDollView, SWTableViewCellDelegate, UISearchResultsUpdating, PHFComposeBarViewDelegate, UITableViewDelegate, UITableViewDataSource>
+@interface JasonViewController : UIViewController <TTTAttributedLabelDelegate, UISearchBarDelegate, SWTableViewCellDelegate, UISearchResultsUpdating, PHFComposeBarViewDelegate, UITableViewDelegate, UITableViewDataSource
+#ifdef ADS
+    , GADBannerViewDelegate, GADInterstitialDelegate
+#endif
+>
 
 @property (nonatomic, strong) NSString *url;
 @property (nonatomic, strong) NSDictionary *options;
@@ -40,26 +46,46 @@
 
 @property (strong, nonatomic) NSDictionary *parser;
 @property (nonatomic, strong) NSDictionary *data;
+@property (strong, nonatomic) NSMutableDictionary *old_header;
+@property (strong, nonatomic) NSMutableDictionary *old_footer;
 
+@property (nonatomic, strong) NSArray *layers;
 @property (nonatomic, strong) NSMutableArray *sections;
 @property (nonatomic, strong) NSArray *rows;
 @property (nonatomic, assign) BOOL isModal;
 @property (nonatomic, strong) NSMutableDictionary *action_callback;
 @property (nonatomic, strong) NSMutableDictionary *events;
+@property (nonatomic, strong) UIView *focusField;
+
+
 @property (strong, nonatomic) NSDictionary *style;
 @property (strong, nonatomic) NSDictionary *rendered;
 @property (strong, nonatomic) NSDictionary *original;
 @property (nonatomic, assign) BOOL contentLoaded;
 @property (nonatomic, assign) BOOL touching;
 @property (nonatomic, assign) BOOL fresh;
+@property (nonatomic, assign) BOOL loading;
+@property (nonatomic, strong) NSDictionary *preload;
+@property (nonatomic, assign) BOOL offline;
+@property (nonatomic, assign) BOOL agentReady;
+@property (nonatomic, assign) BOOL tabNeedsRefresh;
+
 @property (strong, nonatomic) NSMutableDictionary *menu;
 @property (strong, nonatomic) NSMutableDictionary *form;
+@property (strong, nonatomic) NSMutableDictionary *requires;
 @property (strong, nonatomic) NSMutableDictionary *timers;
 @property (strong, nonatomic) NSMutableDictionary *audios;
 
 @property (strong, nonatomic) UITableView *tableView;
 
 @property (strong, nonatomic) UISearchController *searchController;
-- (void)reload: (NSDictionary *)res;
+@property (strong, nonatomic) NSMutableDictionary *agents;
+@property (strong, nonatomic) PHFComposeBarView *composeBarView;
+
+#ifdef ADS
+@property (strong, nonatomic) GADBannerView *bannerAd;
+@property (strong, nonatomic) GADInterstitial * interestialAd;
+#endif
+- (void)reload: (NSDictionary *)res final: (BOOL) final;
 
 @end

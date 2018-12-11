@@ -23,11 +23,11 @@ If you would like to contribute to the [documentation](https://jasonette.github.
 
 Feel free to fork the project and [write your own extension](https://jasonette.github.io/documentation/advanced)
 
-If you wrote a cool extension, please share it with the community in the [slack channel](https://jasonette.herokuapp.com).
+If you wrote a cool extension, please share it with the community in the [slack channel](https://jasonette.now.sh).
 
 ## **Do you have other types of questions?**
 
-* Ask any question about how to use Jasonette on the [Jasonette Slack channel](https://jasonette.herokuapp.com).
+* Ask any question about how to use Jasonette on the [Jasonette Slack channel](https://jasonette.now.sh).
 
 ## **Project Structure**
 
@@ -58,7 +58,7 @@ Here's a brief walkthrough of how the project is structured:
     - **Layer**: Implements [layers](https://jasonette.github.io/documentation/document/#bodylayers)
     - **Section**: Implements [sections](https://jasonette.github.io/documentation/document/#bodysections)
     - **Layout**: Implements [vertical and horizontal layouts](https://jasonette.github.io/documentation/layout/) that can be used inside [sections](https://jasonette.github.io/documentation/document/#bodysections)
-    - **Component**: Implements [componenets](https://jasonette.github.io/documentation/components/), following [the convention described here](https://jasonette.github.io/documentation/advanced/#1-extend-ui-components).
+    - **Component**: Implements [components](https://jasonette.github.io/documentation/components/), following [the convention described here](https://jasonette.github.io/documentation/advanced/#1-extend-ui-components).
       - To build your own component extension, just create your own group here and write your classes.
   - **Helper**
     - Various helper class methods used across various classes.

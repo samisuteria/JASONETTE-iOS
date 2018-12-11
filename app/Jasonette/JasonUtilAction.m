@@ -8,8 +8,8 @@
 
 @implementation JasonUtilAction
 - (void)banner{
-    NSString *title = self.options[@"title"];
-    NSString *description = self.options[@"description"];
+    NSString *title = [self.options[@"title"] description];
+    NSString *description = [self.options[@"description"] description];
     NSString *type = self.options[@"type"];
     if(!title) title = @"Notice";
     if(!description) description = @"";
@@ -37,7 +37,7 @@
 
 - (void)toast{
     NSString *type = self.options[@"type"];
-    NSString *text = self.options[@"text"];
+    NSString *text = [self.options[@"text"] description];
     
     if(!type) type = @"success";
     if(!text) text = @"Updated";
@@ -64,8 +64,8 @@
 
 - (void)alert{
     [[Jason client] loading:NO];
-    NSString *title = self.options[@"title"];
-    NSString *description = self.options[@"description"];
+    NSString *title = [self.options[@"title"] description];
+    NSString *description = [self.options[@"description"] description];
     // 1. Instantiate alert
     UIAlertController *alert= [UIAlertController alertControllerWithTitle:title message:description preferredStyle:UIAlertControllerStyleAlert];
     
@@ -123,7 +123,7 @@
         }
     }];
     UIAlertAction* cancel = [UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleDefault handler:^(UIAlertAction * action) {
-        [[Jason client] finish];
+        [[Jason client] error];
         [alert dismissViewControllerAnimated:YES completion:nil];
     }];
     [alert addAction:ok];
@@ -144,7 +144,6 @@
                 if([item[@"type"] isEqualToString:@"image"]){
                     NSString *url = item[@"url"];
                     NSString *file_url = item[@"file_url"];
-                    NSData *data = item[@"data"];
                     if(url){
                         SDWebImageManager *manager = [SDWebImageManager sharedManager];
                         [manager downloadImageWithURL:[NSURL URLWithString:url]
@@ -162,22 +161,32 @@
                         [share_items addObject:file_url];
                         counter--;
                         if(counter == 0) [self openShareWith:share_items];
-                    } else if(data){
+                    } else if(item[@"data"]){
+                        NSData *data = [[NSData alloc] initWithBase64EncodedString:item[@"data"] options:0];
                         UIImage *image = [UIImage imageWithData:data];
                         [share_items addObject:image];
                         counter--;
                         if(counter == 0) [self openShareWith:share_items];
                     }
+                } else if([item[@"type"] isEqualToString:@"audio"]){
+                    NSString *url = item[@"file_url"];
+                    if(url){
+                        NSURL *file_url = [NSURL fileURLWithPath:url isDirectory:NO];
+                        [share_items addObject:file_url];
+                        counter--;
+                        if(counter == 0) [self openShareWith:share_items];
+                    }
                 } else if([item[@"type"] isEqualToString:@"video"]){
-                    NSString *file_url = item[@"file_url"];
-                    if(file_url){
+                    NSString *url = item[@"file_url"];
+                    if(url){
+                        NSURL *file_url = [NSURL fileURLWithPath:url isDirectory:NO];
                         [share_items addObject:file_url];
                         counter--;
                         if(counter == 0) [self openShareWith:share_items];
                     }
                 } else if([item[@"type"] isEqualToString:@"text"]){
                     if(item[@"text"]){
-                        [share_items addObject:item[@"text"]];
+                        [share_items addObject:[item[@"text"] description]];
                     }
                     counter--;
                 }
@@ -209,7 +218,7 @@
                 }
             } else if([item[@"type"] isEqualToString:@"text"]){
                 if(item[@"text"]){
-                    NSDictionary *res = [NSDictionary dictionaryWithObject:item[@"text"] forKey:(NSString *)kUTTypeUTF8PlainText];
+                    NSDictionary *res = [NSDictionary dictionaryWithObject:[item[@"text"] description] forKey:(NSString *)kUTTypeUTF8PlainText];
                     [to_copy addObject:res];
                 }
             } else if([item[@"type"] isEqualToString:@"image"]){
@@ -229,13 +238,7 @@
     UIActivityViewController *controller = [[UIActivityViewController alloc] initWithActivityItems:items applicationActivities:nil];
     
     // Exclude all activities except AirDrop.
-    NSArray *excludeActivities = @[UIActivityTypeAirDrop,
-                                   UIActivityTypePrint,
-                                   UIActivityTypeAssignToContact,
-                                   UIActivityTypeSaveToCameraRoll,
-                                   UIActivityTypeAddToReadingList,
-                                   UIActivityTypePostToFlickr,
-                                   UIActivityTypePostToVimeo];
+    NSArray *excludeActivities = @[UIActivityTypePostToFlickr, UIActivityTypePostToVimeo];
     controller.excludedActivityTypes = excludeActivities;
     if(controller.popoverPresentationController){
         controller.popoverPresentationController.sourceView = self.VC.view;
@@ -253,42 +256,32 @@
 
 }
 - (void)picker{
-    NSString *title = self.options[@"title"];
+    NSString *title = [self.options[@"title"] description];
     NSArray *items = self.options[@"items"];
-    AHKActionSheet *actionSheet = [[AHKActionSheet alloc] initWithTitle:nil];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    
     for(int i = 0 ; i < items.count ; i++){
         NSDictionary *item = items[i];
-        [actionSheet addButtonWithTitle:item[@"text"] type:AHKActionSheetButtonTypeDefault handler:^(AHKActionSheet *as) {
-            if(item[@"href"]){
-                [[Jason client] go:item[@"href"]];
-            } else if(item[@"action"]){
-                [[Jason client] call:item[@"action"]];
-            }
-        }];
+        UIAlertAction *action = [UIAlertAction actionWithTitle:[item[@"text"] description]
+                                                              style:UIAlertActionStyleDefault handler:^(UIAlertAction * action) {
+                                                                  if(item[@"href"]){
+                                                                      [[Jason client] go:item[@"href"]];
+                                                                  } else if(item[@"action"]){
+                                                                      [[Jason client] call:item[@"action"]];
+                                                                  }
+                                                              }];
+        [alert addAction:action];
     }
-    actionSheet.blurTintColor = [UIColor colorWithWhite:1.0f alpha:0.75f];
-    actionSheet.blurRadius = 8.0f;
-    actionSheet.buttonHeight = 45.0f;
-    
-    if(title){
-        actionSheet.title = title;
-    }
-
-    actionSheet.animationDuration = 0.2f;
-    UIFont *defaultFont = [UIFont fontWithName:@"HelveticaNeue" size:16.0f];
-    actionSheet.buttonTextAttributes = @{ NSFontAttributeName : defaultFont,
-                                          NSForegroundColorAttributeName : [UIColor blackColor] };
-    actionSheet.disabledButtonTextAttributes = @{ NSFontAttributeName : defaultFont,
-                                                  NSForegroundColorAttributeName : [UIColor grayColor] };
-    actionSheet.destructiveButtonTextAttributes = @{ NSFontAttributeName : defaultFont,
-                                                     NSForegroundColorAttributeName : [UIColor redColor] };
-    actionSheet.cancelButtonTextAttributes = @{ NSFontAttributeName : defaultFont,
-                                                NSForegroundColorAttributeName : [UIColor blackColor] };
-
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     dispatch_async(dispatch_get_main_queue(), ^{
-        [actionSheet show];
+        if ([[UIDevice currentDevice] userInterfaceIdiom] == UIUserInterfaceIdiomPad) {
+            alert.popoverPresentationController.sourceView = self.VC.view;
+            alert.popoverPresentationController.sourceRect = CGRectMake(self.VC.view.bounds.size.width / 2.0, self.VC.view.bounds.size.height / 2.0, 1.0, 1.0);
+            [alert.popoverPresentationController setPermittedArrowDirections:0];
+        }
+        [self.VC.navigationController presentViewController:alert animated:YES completion:nil]; // 6
     });
- 
+    
 }
 - (void)datepicker{
     RMActionControllerStyle style = RMActionControllerStyleWhite;
@@ -296,10 +289,10 @@
     NSString *description = @"";
     if(self.options){
         if(self.options[@"title"]){
-            title = self.options[@"title"];
+            title = [self.options[@"title"] description];
         }
         if(self.options[@"description"]){
-            description = self.options[@"description"];
+            description = [self.options[@"description"] description];
         }
     }
 
@@ -320,7 +313,7 @@
     dateSelectionController.message = description;
     
     //Now just present the date selection controller using the standard iOS presentation method
-    [self.VC.navigationController presentViewController:dateSelectionController animated:YES completion:nil];
+    [self.VC.tabBarController presentViewController:dateSelectionController animated:YES completion:nil];
 
 }
 - (void)addressbook{

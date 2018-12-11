@@ -1,22 +1,27 @@
 [![logo](https://raw.githubusercontent.com/gliechtenstein/images/master/jasonette.png)](http://www.jasonette.com)
-
+[![Code Climate](https://codeclimate.com/github/Jasonette/JASONETTE-iOS/badges/gpa.svg)](https://codeclimate.com/github/Jasonette/JASONETTE-iOS)
+[![Issue Count](https://codeclimate.com/github/Jasonette/JASONETTE-iOS/badges/issue_count.svg)](https://codeclimate.com/github/Jasonette/JASONETTE-iOS)
+[![codebeat badge](https://codebeat.co/badges/f31161b4-1729-4968-bc65-5e8e8b102869)](https://codebeat.co/projects/github-com-jasonette-jasonette-ios)
+[![roadmap badge](https://img.shields.io/badge/visit%20the-roadmap-blue.svg)](https://github.com/Jasonette/JASONETTE-iOS/projects/1)
 # [Jasonette](https://www.jasonette.com)
 
 [https://www.jasonette.com](https://www.jasonette.com)
 
 Create your own native iOS app with nothing but JSON. Then send it over the Internet.
 
-##★ Jasonette fetches this JSON markup from a server:
+Looking for an Android version? [See here](https://www.github.com/Jasonette/JASONETTE-Android)
+
+## ★ Jasonette fetches this JSON markup from a server:
 
 ![json](https://raw.githubusercontent.com/gliechtenstein/images/master/json.png)
 
-##★ And self-constructs into the following native app, in realtime:
+## ★ And self-constructs into the following native app, in realtime:
 
 ![instagram](https://github.com/Jasonette/Instagram-UI-example/blob/master/images/instagram.gif)
 
 <br>
 
-#Cool things about Jasonette
+# Cool things about Jasonette
 
 - **100% NATIVE**: Jasonette maps JSON into native components and native function calls. There is no gimmick. There is no magic.
 - **App loads over HTTP**: Your app exists 100% as JSON, and loads from the cloud. No more hard-coding.
@@ -25,13 +30,13 @@ Create your own native iOS app with nothing but JSON. Then send it over the Inte
 
 <br>
 
-# [Quickstart](https://www.jasonette.com)
-Visit [the website](http://www.jasonette.com) to get started.
+# [Quickstart](https://jasonette.github.io/documentation/#quickstart)
+Visit [the website](http://www.jasonette.com) to get started, or visit [the docs](https://jasonette.github.io/documentation) to learn more about how to use Jasonette.
 
 <br>
 
 # Download
-Latest release: [ver0.1.0](https://jasonette.github.io/documentation)
+Latest release: [latest version](https://github.com/Jasonette/JASONETTE-iOS/archive/master.zip)
 
 <br>
 
@@ -46,7 +51,7 @@ Try playing these on Jasonette and watch them turn into native apps in front of 
 
 # Technical Highlights
 
-##1. One JSON to rule them all
+## 1. One JSON to rule them all
 
 Jasonette simplifies the entire app building process down to nothing more than:
 
@@ -64,7 +69,7 @@ This is possible because Jasonette came up with a way to **fit an entire app wor
 
 <br>
 
-##2. App-over-HTTP
+## 2. App-over-HTTP
 Until now, the only thing JSON could send over the Internet was raw data. Normally apps would fetch remote data from the server for a connected experience, but the actual app logic would be hard-coded on the client side. This makes it hard to update and extend apps.
 
 But what happens when you can express an entire app logic as JSON?
@@ -75,13 +80,13 @@ But what happens when you can express an entire app logic as JSON?
 
 <br>
 
-##3. Designed to be extended or integrated
+## 3. Designed to be extended or integrated
 Currently Jasonette covers all the essential native APIs and components, which means you can build pretty much any app you can imagine. But Jasonette is very flexible.
 
-###A. Extensible
+### A. Extensible
 If you don't see a feature you want, you can simply [extend Jasonette](https://jasonette.github.io/documentation/advanced/#extension-vs-integration). If it's useful for the general public, we can even merge it into the core.
 
-###B. Integrate existing code
+### B. Integrate existing code
 You can even [integrate Jasonette with your existing iOS project](https://jasonette.github.io/documentation/advanced/#extension-vs-integration) if you want. This way you can use Jasonette for just a small part of your app without having to completely switch to a new way of programming.
 
 <br>
@@ -93,17 +98,36 @@ Have a bug or a feature request regarding the Jasonette code itself? [Please ope
 <br>
 
 # Questions and Support
-For questions and support, please use the [Slack chatroom](https://jasonette.herokuapp.com)
+Follow or join these channels for questions and support, and to keep updated on latest releases and announcements.
 
-[![slack](https://raw.githubusercontent.com/gliechtenstein/images/master/slack.png)](https://jasonette.herokuapp.com)
-
-<br>
-
-# Stay in touch
-To keep updated on latest releases and announcements,
-
-- Follow on Twitter [@jasonclient](https://twitter.com/jasonclient)
-- [join our slack](https://jasonette.herokuapp.com)
+<table class='equalwidth follow'>
+  <tr>
+		<td>
+			<a href='https://jasonette.now.sh'>
+        <b>Slack</b><br><br>
+        <img src='https://raw.githubusercontent.com/gliechtenstein/images/master/slack_smaller.png'>
+        <br>
+        <img src="https://jasonette.now.sh/badge.svg">
+      </a>
+		</td>
+		<td>
+			<a href='https://forum.jasonette.com'>
+        <b>Forum</b><br><br>
+				<img src='https://raw.githubusercontent.com/gliechtenstein/images/master/discourse_smaller.png'>
+        <br>
+        Visit >
+			</a>
+		</td>
+		<td>
+			<a href='https://www.twitter.com/jasonclient'>
+        <b>Twitter</b><br><br>
+				<img src='https://raw.githubusercontent.com/gliechtenstein/images/master/twitter_smaller.png'>
+        <br>
+        Follow >
+			</a>
+		</td>
+	</tr>
+</table>
 
 <br>
 

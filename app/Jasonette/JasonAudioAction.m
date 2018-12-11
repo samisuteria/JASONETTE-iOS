@@ -21,25 +21,23 @@
         }
     }
     controller.delegate = self;
-    [self.VC.navigationController presentViewController:controller animated:YES completion:nil];
+    [self.VC.navigationController presentBlurredAudioRecorderViewControllerAnimated:controller];
 }
 - (void)stop{
     if(!self.VC.audios){
         self.VC.audios = [[NSMutableDictionary alloc] init];
     }
-    if(self.options){
-        NSString *url = self.options[@"url"];
-        if(url){
+    NSString *url = NULL;
+    if(self.options && (url = self.options[@"url"])){
             if(self.VC.audios[url]){
                 [self.VC.audios[url] stop];
                 [self.VC.audios removeObjectForKey:url];
             }
-        } else {
-            for(NSString *audio_name in self.VC.audios){
-                FSAudioStream *audioStream = self.VC.audios[audio_name];
-                [audioStream stop];
-                [self.VC.audios removeObjectForKey:audio_name];
-            }
+    } else {
+        for(NSString *audio_name in self.VC.audios){
+            FSAudioStream *audioStream = self.VC.audios[audio_name];
+            [audioStream stop];
+            [self.VC.audios removeObjectForKey:audio_name];
         }
     }
     [[Jason client] success];
@@ -116,18 +114,16 @@
     if(!self.VC.audios){
         self.VC.audios = [[NSMutableDictionary alloc] init];
     }
-    if(self.options){
-        NSString *url = self.options[@"url"];
-        if(url){
-            if(self.VC.audios[url]){
+    NSString *url = NULL;
+    if(self.options && (url = self.options[@"url"])){
+        if(self.VC.audios[url]){
                 FSAudioStream *audioStream = self.VC.audios[url];
                 [audioStream pause];
             }
-        } else {
-            for(NSString *audio_name in self.VC.audios){
-                FSAudioStream *audioStream = self.VC.audios[audio_name];
-                [audioStream pause];
-            }
+    } else {
+        for(NSString *audio_name in self.VC.audios){
+            FSAudioStream *audioStream = self.VC.audios[audio_name];
+            [audioStream pause];
         }
     }
     [[Jason client] success];
@@ -142,18 +138,19 @@
     if(self.options){
         NSString *url = self.options[@"url"];
         if(url){
+            FSAudioStream *audioStream;
             if(self.VC.audios[url]){
                 if([self.VC.audios[url] isPlaying]){
-                    FSAudioStream *audioStream = (FSAudioStream *)self.VC.audios[url];
+                    audioStream = (FSAudioStream *)self.VC.audios[url];
                     [audioStream pause];
                 } else {
-                    FSAudioStream *audioStream = (FSAudioStream *)self.VC.audios[url];
+                    audioStream = (FSAudioStream *)self.VC.audios[url];
                     [audioStream pause];
                     [audioStream play];
                 }
             } else {
             
-                FSAudioStream *audioStream = [[FSAudioStream alloc] init];
+                audioStream = [[FSAudioStream alloc] init];
                 audioStream.strictContentTypeChecking = NO;
                 audioStream.defaultContentType = @"audio/mpeg";
 
@@ -214,19 +211,29 @@
                     
                     
                 }
-                self.VC.audios[url] = audioStream;
-                [[Jason client] success];
             }
-        } else {
-            [[Jason client] finish];
+            self.VC.audios[url] = audioStream;
+            [[Jason client] success];
+
+        }  // end of if(url)
+        else {
+            [[Jason client] error];
         }
-    }
+    }   // end of if (self.options)
 }
 
 -(void)audioRecorderController:(IQAudioRecorderViewController *)controller didFinishWithAudioAtPath:(NSString *)filePath
 {
     NSURL *fileUrl = [NSURL fileURLWithPath: filePath];
-    [[Jason client] success: @{@"url": fileUrl, @"data": [NSData dataWithContentsOfURL:fileUrl] , @"content_type": @"audio/m4a"}];
+    NSData *d = [NSData dataWithContentsOfURL:fileUrl];
+    NSString *base64 = [d base64EncodedStringWithOptions:0];
+    NSString *dataFormatString = @"data:audio/m4a;base64,%@";
+    NSString* dataString = [NSString stringWithFormat:dataFormatString, base64];
+    NSURL* dataURI = [NSURL URLWithString:dataString];
+
+    [[Jason client] success: @{@"file_url": filePath, @"data_uri": dataURI.absoluteString, @"data": base64 , @"content_type": @"audio/m4a"}];
+    [self.VC.navigationController dismissViewControllerAnimated:YES completion:nil];
+    
 }
 
 -(void)audioRecorderControllerDidCancel:(IQAudioRecorderViewController *)controller
